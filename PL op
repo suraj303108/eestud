@@ -1,37 +1,15 @@
-df = df.rename(columns={
-        "Line Item": "Account",
-        "SS: Segment: BL": "Segment",
-        "SS_LOB: BL Topline": "Line",
-        "SS_Channel: BL": "Channel",
-        "SS_States: US States Reporting": "States",
-        "Value": "Amount",
-        "Period": "Book Date"
-    })
-    
-    # Step 3: Add "State" column based on "States"
-    df["State"] = df["States"].apply(lambda x: x[:2] if x != "" else "State NA")
-    
-    # Step 4: Add "Distribution" column by concatenating "Segment" and "Channel"
-    df["Distribution"] = df["Segment"] + "-" + df["Channel"]
-    
-    # Step 5: Add "Reinsurance" column with fixed value "RI_NA"
-    df["Reinsurance"] = "RI_NA"
-    
-    # Step 6: Remove the "States" column
-    df = df.drop(columns=["States"])
-    
-    # Step 7: Change column types
-    df["State"] = df["State"].astype(str)
-    df["Distribution"] = df["Distribution"].astype(str)
-    df["Reinsurance"] = df["Reinsurance"].astype(str)
-    df["Book Date"] = pd.to_datetime(df["Book Date"], errors='coerce')  # Ensure it's a date
-    df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce')  # Ensure it's a numeric value
-    
-    # Step 8: Select only the required columns
-    df = df[["Account", "Line", "Book Date", "Amount", "State", "Distribution", "Reinsurance"]]
-    
-    # Print the resulting DataFrame
-    print(df.head())  # Show top rows of the cleaned DataFrame
-
-else:
-    print(f"Failed to fetch data from SharePoint. HTTP Status code: {response.status_code}")
+let
+  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
+  Navigation = Source{[#"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions SC TL/", Name = "SC Metrics - Active Plan - Current Working PBI.csv"]}[Content],
+  #"Imported CSV" = Csv.Document(Navigation, [Delimiter = ",", Columns = 10, Encoding = 65001, QuoteStyle = QuoteStyle.None]),
+  #"Changed Type2" = Table.TransformColumnTypes(#"Imported CSV",{{"Column1", type text}, {"Column2", type text}, {"Column3", type text}, {"Column4", type text}, {"Column5", type text}, {"Column6", type text}, {"Column7", type text}, {"Column8", type text}, {"Column9", type text}, {"Column10", type text}}),
+  #"Promoted Headers" = Table.PromoteHeaders(#"Changed Type2", [PromoteAllScalars=true]),
+  #"Replaced Value" = Table.ReplaceValue(#"Promoted Headers"," - Reinsurance","",Replacer.ReplaceText,{"Line Item"}),
+  #"Renamed Columns1" = Table.RenameColumns(#"Replaced Value",{{"Channel Hierarchy", "Channel"}, {"LOB", "Line"}, {"Line Item", "Account"}, {"State", "States"}, {"Period", "Book Date"},{"Value", "Amount"}}),
+  #"Added State" = Table.AddColumn(#"Renamed Columns1", "State", each if [#"States"] = "State NA" then "State NA" else if [#"States"] = "" then "State NA" else Text.Start([#"States"],2)),
+  #"Added Distribution" = Table.AddColumn(#"Added State", "Distribution", each [#"Segment"] & "-" & [#"Channel"]),
+  #"Added Reinsurance" = Table.AddColumn(#"Added Distribution", "Reinsurance", each if [#"RI Code"] = "" & [SC Reinsurance Code] = "" then "" else if [#"RI Code"] = "" then [SC Reinsurance Code] else if [SC Reinsurance Code] = "" then [#"RI Code"] else "NA"),
+  #"Removed Columns" = Table.RemoveColumns(#"Added Reinsurance",{"RI Code", "States", "SC Reinsurance Code", "Channel", "Segment", "DAC Accounts"}),
+  #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Book Date", type date}, {"Distribution", type text}, {"Reinsurance", type text}, {"State", type text}, {"Amount", type number}})
+in
+  #"Changed Type"
