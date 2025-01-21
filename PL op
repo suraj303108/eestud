@@ -1,1 +1,21 @@
+#Create function for hierarchies
+def create_hierarchy(dimension_file_dataframe,child_name,parent_name):
+     dimension_file_dataframe['Account'] = dimension_file_dataframe['Account'].astype(str) 
+     dimension_file_dataframe_main = dimension_file_dataframe.copy()
+     account_level = 1
+     while account_level<10:
+      name_var = child_name+str(account_level)
+      dimension_file_dataframe = pd.merge(dimension_file_dataframe,
+                                           dimension_file_dataframe_main,
+                                           left_on=parent_name, right_on=child_name,
+                                           how = 'left').drop(columns=child_name+str('_y')).rename(columns={parent_name+str('_x'):name_var, child_name+str('_x'): child_name, parent_name+str('_y'): parent_name})
+     
+      if(dimension_file_dataframe[parent_name].isna().all()):
+         name_var = parent_name+str('_')+str(account_level+1)
+         dimension_file_dataframe =dimension_file_dataframe.rename(columns={parent_name: name_var})
+         break
+      account_level+=1    
+     return(dimension_file_dataframe)
 
+
+I want to create hierchie same as in powerbi. I have a sheet with parent child column. I want output as parent child and the respective column for hierarchy and the path and path length
