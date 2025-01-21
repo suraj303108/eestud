@@ -1,1 +1,45 @@
 
+def optimized_hierarchy(dataframe, child_col, parent_col):
+    dataframe = dataframe.copy()
+    hierarchy_dict = {}
+
+    # Build a dictionary for parent-child relationships
+    for _, row in dataframe.iterrows():
+        hierarchy_dict[row[child_col]] = row[parent_col]
+
+    # Recursive function to find the full hierarchy path
+    def find_hierarchy_path(child, hierarchy_cache={}):
+        if child in hierarchy_cache:
+            return hierarchy_cache[child]
+
+        path = [child]
+        while child in hierarchy_dict and pd.notna(hierarchy_dict[child]):
+            child = hierarchy_dict[child]
+            path.append(child)
+
+        path.reverse()  # Reverse to make it top-to-bottom
+        hierarchy_cache[path[0]] = path  # Cache the result
+        return path
+
+    # Apply the recursive function to build paths
+    dataframe["Path"] = dataframe[child_col].apply(find_hierarchy_path)
+    max_depth = dataframe["Path"].map(len).max()
+
+    # Expand paths into separate hierarchical columns
+    for level in range(max_depth):
+        dataframe[f"Line {level + 1}"] = dataframe["Path"].apply(
+            lambda x: x[level] if level < len(x) else None
+        )
+
+    # Add the length of each hierarchy
+    dataframe["Length"] = dataframe["Path"].map(len)
+
+    # Drop intermediate columns if needed
+    dataframe.drop(columns=["Path"], inplace=True)
+
+    return dataframe
+
+
+# Apply the optimized function
+optimized_output_df = optimized_hierarchy(input_df, "Line", "Parent Alt")
+optimized_output_df
