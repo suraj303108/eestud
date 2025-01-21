@@ -1,22 +1,74 @@
-let
-  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
-  Navigation = Source{[#"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions PL TL/", Name = "PL Metrics - Active Plan - Current Working PBI.csv"]}[Content],
-  #"Imported CSV" = Csv.Document(Navigation, [Delimiter = ",", Columns = 10, Encoding = 65001, QuoteStyle = QuoteStyle.None]),
-  #"Promoted Headers" = Table.PromoteHeaders(#"Imported CSV", [PromoteAllScalars = true]),
-  #"Renamed Columns1" = Table.RenameColumns(#"Promoted Headers",{{"Segment: PL", "Segment"}}),
-  #"Filtered Rows" = Table.SelectRows(#"Renamed Columns1", each ([Line Item] <> "NB Written Premium" and [Line Item] <> "RB Written Premium" and [Line Item] <> "Written Premium") and ([Segment] = "" or [Segment] = "PL Segment")),
-  #"Changed Type" = Table.TransformColumnTypes(#"Filtered Rows",{{"Value", type number}, {"Period", type date}}),
-  #"Renamed Columns" = Table.RenameColumns(#"Changed Type",{{"LOB", "Line"}, {"Channel Hierarchy", "Channel"}, {"State", "States"}, {"Value", "Amount"}, {"Period", "Book Date"}}),
-  #"Trimmed Line Item" = Table.TransformColumns(#"Renamed Columns", {{"Line Item", each Text.Trim(_), type nullable text}}),
-  #"Added State" = Table.AddColumn(#"Trimmed Line Item", "State", each if [#"States"] = "State NA" then "State NA" else if [#"States"] = "" then "State NA" else Text.Start([#"States"],2)),
-  #"Added Distribution" = Table.AddColumn(#"Added State", "Distribution", each if [Segment] = "PL Segment" and [Channel] = "No_Channel"  then [Segment] & "-" & [Brand Hierarchy] & [Channel] else if [Segment] = "" and  [Channel] = "No_Channel" then "PL Segment-" & [Brand Hierarchy] & [Channel] else if  [Segment] = "" then [Channel] else [Segment] & "-" & [Channel]),
-  #"Added Account" = Table.AddColumn(#"Added Distribution", "Account", each if [Line Item] = "" and [DAC Accounts] = "" then "" else if [DAC Accounts] <> "" then [Line Item] & " - " & [DAC Accounts] else [Line Item]),
-  #"Added Reinsurance" = Table.AddColumn(#"Added Account", "Reinsurance", each if  ([RI Code] = "" and ([Account] = "DAC Amortization" or [Account] = "DAC Capitalization")) then "GP" else if [RI Code] = "RI Direct" then "Direct" else if [Account] = "RI-Non CUNA Earned Premium - Assumed" then "Assumed" else if [Account] = "RI-Non CUNA Earned Premium - Ceded" then "Ceded" else if [RI Code] <> "" then [RI Code] else "Direct"),
-  #"Removed Columns3" = Table.RemoveColumns(#"Added Reinsurance",{"Brand Hierarchy", "Line Item", "RI Code", "DAC Accounts", "States"}),
-  #"Changed Type1" = Table.TransformColumnTypes(#"Removed Columns3", {{"State", type text}, {"Distribution", type text}, {"Reinsurance", type text}, {"Account", type text}}),
-  #"Replaced Value" = Table.ReplaceValue(#"Changed Type1","","PL Segment",Replacer.ReplaceValue,{"Segment"}),
-  #"Replaced Value1" = Table.ReplaceValue(#"Replaced Value","IA (Vol) State Auto","PL Segment-IA (Vol) State Auto",Replacer.ReplaceValue,{"Distribution"}),
-  #"Reordered columns" = Table.ReorderColumns(#"Replaced Value1", {"Channel", "Segment", "Account", "Line", "Book Date", "Amount", "State", "Distribution", "Reinsurance"}),
-  #"Choose columns" = Table.SelectColumns(#"Reordered columns", {"Account", "Line", "Book Date", "Amount", "State", "Distribution", "Reinsurance"})
-in
-  #"Choose columns"
+df = pd.read_csv(csv_data)
+
+# Step 1: Rename columns
+df.rename(columns={"Segment: PL": "Segment", "LOB": "Line", "Channel Hierarchy": "Channel", "State": "States", 
+                   "Value": "Amount", "Period": "Book Date"}, inplace=True)
+
+# Step 2: Filter rows based on conditions
+df = df[(~df['Line Item'].isin(['NB Written Premium', 'RB Written Premium', 'Written Premium'])) & 
+        (df['Segment'].isin(['', 'PL Segment']))]
+
+# Step 3: Convert columns to appropriate data types
+df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
+df['Book Date'] = pd.to_datetime(df['Book Date'], errors='coerce')
+
+# Step 4: Trim "Line Item" column
+df['Line Item'] = df['Line Item'].str.strip()
+
+# Step 5: Add "State" column based on conditions
+df['State'] = np.where(df['States'].isin(['State NA', '']), 'State NA', df['States'].str[:2])
+
+# Step 6: Add "Distribution" column based on conditions
+df['Distribution'] = np.where(
+    (df['Segment'] == 'PL Segment') & (df['Channel'] == 'No_Channel'),
+    df['Segment'] + '-' + df['Brand Hierarchy'] + df['Channel'],
+    np.where(
+        (df['Segment'] == '') & (df['Channel'] == 'No_Channel'),
+        'PL Segment-' + df['Brand Hierarchy'] + df['Channel'],
+        np.where(df['Segment'] == '', df['Channel'],
+                 df['Segment'] + '-' + df['Channel'])
+    )
+)
+
+# Step 7: Add "Account" column based on conditions
+df['Account'] = np.where(
+    (df['Line Item'] == '') & (df['DAC Accounts'] == ''),
+    '',
+    np.where(df['DAC Accounts'] != '', df['Line Item'] + " - " + df['DAC Accounts'], df['Line Item'])
+)
+
+# Step 8: Add "Reinsurance" column based on conditions
+df['Reinsurance'] = np.where(
+    (df['RI Code'] == '') & (df['Account'].isin(['DAC Amortization', 'DAC Capitalization'])),
+    'GP',
+    np.where(df['RI Code'] == 'RI Direct', 'Direct',
+             np.where(df['Account'] == 'RI-Non CUNA Earned Premium - Assumed', 'Assumed',
+                      np.where(df['Account'] == 'RI-Non CUNA Earned Premium - Ceded', 'Ceded',
+                               np.where(df['RI Code'] != '', df['RI Code'], 'Direct')))
+    )
+)
+
+# Step 9: Remove unnecessary columns
+df.drop(columns=['Brand Hierarchy', 'Line Item', 'RI Code', 'DAC Accounts', 'States'], inplace=True)
+
+# Step 10: Convert column types to appropriate values
+df['State'] = df['State'].astype(str)
+df['Distribution'] = df['Distribution'].astype(str)
+df['Reinsurance'] = df['Reinsurance'].astype(str)
+df['Account'] = df['Account'].astype(str)
+
+# Step 11: Replace values in "Segment" and "Distribution" columns
+df['Segment'].replace('', 'PL Segment', inplace=True)
+df['Distribution'].replace('IA (Vol) State Auto', 'PL Segment-IA (Vol) State Auto', inplace=True)
+
+# Step 12: Reorder columns
+df = df[['Channel', 'Segment', 'Account', 'Line', 'Book Date', 'Amount', 'State', 'Distribution', 'Reinsurance']]
+
+# Step 13: Select final columns for the output
+df = df[['Account', 'Line', 'Book Date', 'Amount', 'State', 'Distribution', 'Reinsurance']]
+
+# Display the transformed DataFrame
+print(df.head())
+
+# Optionally, save the final DataFrame to a new CSV file
+df.to_csv('transformed_data.csv', index=False)
