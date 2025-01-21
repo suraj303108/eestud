@@ -1,15 +1,47 @@
-let
-  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
-  Navigation = Source{[#"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions SC TL/", Name = "SC Metrics - Active Plan - Current Working PBI.csv"]}[Content],
-  #"Imported CSV" = Csv.Document(Navigation, [Delimiter = ",", Columns = 10, Encoding = 65001, QuoteStyle = QuoteStyle.None]),
-  #"Changed Type2" = Table.TransformColumnTypes(#"Imported CSV",{{"Column1", type text}, {"Column2", type text}, {"Column3", type text}, {"Column4", type text}, {"Column5", type text}, {"Column6", type text}, {"Column7", type text}, {"Column8", type text}, {"Column9", type text}, {"Column10", type text}}),
-  #"Promoted Headers" = Table.PromoteHeaders(#"Changed Type2", [PromoteAllScalars=true]),
-  #"Replaced Value" = Table.ReplaceValue(#"Promoted Headers"," - Reinsurance","",Replacer.ReplaceText,{"Line Item"}),
-  #"Renamed Columns1" = Table.RenameColumns(#"Replaced Value",{{"Channel Hierarchy", "Channel"}, {"LOB", "Line"}, {"Line Item", "Account"}, {"State", "States"}, {"Period", "Book Date"},{"Value", "Amount"}}),
-  #"Added State" = Table.AddColumn(#"Renamed Columns1", "State", each if [#"States"] = "State NA" then "State NA" else if [#"States"] = "" then "State NA" else Text.Start([#"States"],2)),
-  #"Added Distribution" = Table.AddColumn(#"Added State", "Distribution", each [#"Segment"] & "-" & [#"Channel"]),
-  #"Added Reinsurance" = Table.AddColumn(#"Added Distribution", "Reinsurance", each if [#"RI Code"] = "" & [SC Reinsurance Code] = "" then "" else if [#"RI Code"] = "" then [SC Reinsurance Code] else if [SC Reinsurance Code] = "" then [#"RI Code"] else "NA"),
-  #"Removed Columns" = Table.RemoveColumns(#"Added Reinsurance",{"RI Code", "States", "SC Reinsurance Code", "Channel", "Segment", "DAC Accounts"}),
-  #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Book Date", type date}, {"Distribution", type text}, {"Reinsurance", type text}, {"State", type text}, {"Amount", type number}})
-in
-  #"Changed Type"
+df = pd.read_csv(csv_data, delimiter=',', header=None, encoding='utf-8')
+
+    # Step 2: Change column types to text (convert all columns to string)
+    df = df.astype(str)
+
+    # Step 3: Promote Headers (set first row as columns)
+    df.columns = df.iloc[0]
+    df = df.drop(0).reset_index(drop=True)
+
+    # Step 4: Replace " - Reinsurance" in the 'Line Item' column
+    df["Line Item"] = df["Line Item"].str.replace(" - Reinsurance", "", regex=False)
+
+    # Step 5: Rename columns
+    df = df.rename(columns={
+        "Channel Hierarchy": "Channel",
+        "LOB": "Line",
+        "Line Item": "Account",
+        "State": "States",
+        "Period": "Book Date",
+        "Value": "Amount"
+    })
+
+    # Step 6: Add "State" column based on "States"
+    df["State"] = df["States"].apply(lambda x: "State NA" if x == "State NA" or x == "" else x[:2])
+
+    # Step 7: Add "Distribution" column by concatenating "Segment" and "Channel"
+    df["Distribution"] = df["Segment"].fillna('') + "-" + df["Channel"].fillna('')
+
+    # Step 8: Add "Reinsurance" column with custom logic based on "RI Code" and "SC Reinsurance Code"
+    df["Reinsurance"] = df.apply(
+        lambda row: "" if row["RI Code"] == "" and row["SC Reinsurance Code"] == "" else 
+                    (row["RI Code"] if row["SC Reinsurance Code"] == "" else 
+                     (row["SC Reinsurance Code"] if row["RI Code"] == "" else "NA")), axis=1
+    )
+
+    # Step 9: Remove unnecessary columns
+    df = df.drop(columns=["RI Code", "States", "SC Reinsurance Code", "Channel", "Segment", "DAC Accounts"])
+
+    # Step 10: Change column types (ensure correct types for the final columns)
+    df["Book Date"] = pd.to_datetime(df["Book Date"], errors='coerce')  # Convert to datetime
+    df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce')  # Convert to numeric
+
+    # Step 11: Final DataFrame with selected columns
+    df = df[["Account", "Line", "Book Date", "Amount", "State", "Distribution", "Reinsurance"]]
+
+    # Print the resulting DataFrame
+    print(df.head())
