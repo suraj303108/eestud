@@ -1,0 +1,19 @@
+let
+  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
+  Navigation = Source{[#"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions PL OP/", Name = "PL Ops Metrics Export - Current What If PBI.csv"]}[Content],
+  #"Imported CSV" = Csv.Document(Navigation, [Delimiter = ",", Columns = 7, Encoding = 65001, QuoteStyle = QuoteStyle.None]),
+  #"Changed Type" = Table.TransformColumnTypes(#"Imported CSV",{{"Column1", type text}, {"Column2", type text}, {"Column3", type text}, {"Column4", type text}, {"Column5", type text}, {"Column6", type text}, {"Column7", type text}}),
+    #"Promoted Headers" = Table.PromoteHeaders(#"Changed Type", [PromoteAllScalars=true]),
+    #"Replaced Value" = Table.ReplaceValue(#"Promoted Headers","State N/A","State NA",Replacer.ReplaceText,{"SS_States: US States"}),
+    #"Added State" = Table.AddColumn(#"Replaced Value", "State", each if [#"SS_States: US States"] = "State NA" then "State NA" else if [#"SS_States: US States"] = "" then "State NA" else Text.Start([#"SS_States: US States"],2)),
+    #"Added Distribution" = Table.TransformColumnTypes(Table.AddColumn(#"Added State", "Distribution", each if [Brand] = "LM" then  if [#"Channel"] = "Platform" then "LM Platform" else [#"Channel"] else [#"Channel"]), {{"Distribution", type text}}),
+    #"Added Reinsurance" = Table.TransformColumnTypes(Table.AddColumn(#"Added Distribution", "Reinsurance", each "Direct"), {{"Reinsurance", type text}}),
+    #"Added Segment" = Table.TransformColumnTypes(Table.AddColumn(#"Added Reinsurance", "Segment", each "PL Segment"), {{"Segment", type text}}),
+    #"Renamed Columns" = Table.RenameColumns(#"Added Segment",{{"SS_LOB: Export Metric", "Line"}, {"Line Item", "Account"}, {"Period", "Book Date"}}),
+    #"Removed Brand & US States" = Table.RemoveColumns(#"Renamed Columns",{"Brand", "SS_States: US States"}),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Removed Brand & US States",{{"State", type text}, {"Value", type number}, {"Book Date", type date}}),
+    #"Renamed Columns1" = Table.RenameColumns(#"Changed Type1",{{"Value", "Amount"}}),
+  #"Reordered columns" = Table.ReorderColumns(#"Renamed Columns1", {"Account", "Line", "Book Date", "Amount", "State", "Distribution", "Reinsurance", "Channel", "Segment"}),
+  #"Choose columns 1" = Table.SelectColumns(#"Reordered columns", {"Account", "Line", "Book Date", "Amount", "State", "Distribution", "Reinsurance"})
+  in
+    #"Choose columns 1"
