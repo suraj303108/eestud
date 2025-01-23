@@ -1,47 +1,9 @@
-df = pd.read_csv(csv_data, delimiter=',', header=None, encoding='utf-8')
-
-    # Step 2: Change column types to text (convert all columns to string)
-    df = df.astype(str)
-
-    # Step 3: Promote Headers (set first row as columns)
-    df.columns = df.iloc[0]
-    df = df.drop(0).reset_index(drop=True)
-
-    # Step 4: Replace " - Reinsurance" in the 'Line Item' column
-    df["Line Item"] = df["Line Item"].str.replace(" - Reinsurance", "", regex=False)
-
-    # Step 5: Rename columns
-    df = df.rename(columns={
-        "Channel Hierarchy": "Channel",
-        "LOB": "Line",
-        "Line Item": "Account",
-        "State": "States",
-        "Period": "Book Date",
-        "Value": "Amount"
-    })
-
-    # Step 6: Add "State" column based on "States"
-    df["State"] = df["States"].apply(lambda x: "State NA" if x == "State NA" or x == "" else x[:2])
-
-    # Step 7: Add "Distribution" column by concatenating "Segment" and "Channel"
-    df["Distribution"] = df["Segment"].fillna('') + "-" + df["Channel"].fillna('')
-
-    # Step 8: Add "Reinsurance" column with custom logic based on "RI Code" and "SC Reinsurance Code"
-    df["Reinsurance"] = df.apply(
-        lambda row: "" if row["RI Code"] == "" and row["SC Reinsurance Code"] == "" else 
-                    (row["RI Code"] if row["SC Reinsurance Code"] == "" else 
-                     (row["SC Reinsurance Code"] if row["RI Code"] == "" else "NA")), axis=1
-    )
-
-    # Step 9: Remove unnecessary columns
-    df = df.drop(columns=["RI Code", "States", "SC Reinsurance Code", "Channel", "Segment", "DAC Accounts"])
-
-    # Step 10: Change column types (ensure correct types for the final columns)
-    df["Book Date"] = pd.to_datetime(df["Book Date"], errors='coerce')  # Convert to datetime
-    df["Amount"] = pd.to_numeric(df["Amount"], errors='coerce')  # Convert to numeric
-
-    # Step 11: Final DataFrame with selected columns
-    df = df[["Account", "Line", "Book Date", "Amount", "State", "Distribution", "Reinsurance"]]
-
-    # Print the resulting DataFrame
-    print(df.head())
+ #"Combined Plan1" = #"abfcdf98-eb16-4ac4-95d3-21995e16bf57"{[entity="Fact Combined Plan"]}[Data],
+    #"Added Custom" = Table.AddColumn(#"Combined Plan1", "Product", each "PRO"),
+    #"Changed Type" = Table.TransformColumnTypes(#"Added Custom",{{"Product", type text}}),
+    #"Filtered Rows" = Table.SelectRows(#"Changed Type", each [Account] = "NB Written Premium" or [Account] = "RB Written Premium" or [Account] = "Written Premium" or [Account] = "Audit & Retro Written Premium" or [Account] = "CUNA - NB WP" or [Account] = "CUNA - RB WP" or [Account] = "Written Premium Renewal Business"),
+    #"Renamed Columns" = Table.RenameColumns(#"Filtered Rows",{{"Amount", "oldAmount"}, {"Account", "oldAccount"}}),
+    #"Added Custom1" = Table.AddColumn(#"Renamed Columns", "Amount", each -[oldAmount]),
+    #"Added Custom2" = Table.AddColumn(#"Added Custom1", "Account", each "Earned Premium"),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Added Custom2",{{"Amount", type number}, {"Account", type text}}),
+    #"Removed Columns" = Table.RemoveColumns(#"Changed Type1",{"oldAccount", "oldAmount"})
