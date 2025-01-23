@@ -1,9 +1,37 @@
- #"Combined Plan1" = #"abfcdf98-eb16-4ac4-95d3-21995e16bf57"{[entity="Fact Combined Plan"]}[Data],
-    #"Added Custom" = Table.AddColumn(#"Combined Plan1", "Product", each "PRO"),
-    #"Changed Type" = Table.TransformColumnTypes(#"Added Custom",{{"Product", type text}}),
-    #"Filtered Rows" = Table.SelectRows(#"Changed Type", each [Account] = "NB Written Premium" or [Account] = "RB Written Premium" or [Account] = "Written Premium" or [Account] = "Audit & Retro Written Premium" or [Account] = "CUNA - NB WP" or [Account] = "CUNA - RB WP" or [Account] = "Written Premium Renewal Business"),
-    #"Renamed Columns" = Table.RenameColumns(#"Filtered Rows",{{"Amount", "oldAmount"}, {"Account", "oldAccount"}}),
-    #"Added Custom1" = Table.AddColumn(#"Renamed Columns", "Amount", each -[oldAmount]),
-    #"Added Custom2" = Table.AddColumn(#"Added Custom1", "Account", each "Earned Premium"),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Added Custom2",{{"Amount", type number}, {"Account", type text}}),
-    #"Removed Columns" = Table.RemoveColumns(#"Changed Type1",{"oldAccount", "oldAmount"})
+import pandas as pd
+
+# Load your data into a DataFrame (replace 'data_source' with your actual data source)
+df = pd.read_csv('data_source.csv')
+
+# Add custom column 'Product'
+df['Product'] = 'PRO'
+
+# Change type of 'Product' column to text (not needed in Python as pandas handles it)
+df['Product'] = df['Product'].astype(str)
+
+# Filter rows based on 'Account' column values
+filtered_df = df[df['Account'].isin([
+    'NB Written Premium', 
+    'RB Written Premium', 
+    'Written Premium', 
+    'Audit & Retro Written Premium', 
+    'CUNA - NB WP', 
+    'CUNA - RB WP', 
+    'Written Premium Renewal Business'
+])]
+
+# Rename columns
+filtered_df.rename(columns={'Amount': 'oldAmount', 'Account': 'oldAccount'}, inplace=True)
+
+# Add custom columns 'Amount' and 'Account'
+filtered_df['Amount'] = -filtered_df['oldAmount']
+filtered_df['Account'] = 'Earned Premium'
+
+# Change types of new columns (not needed in Python as pandas handles it)
+filtered_df['Amount'] = filtered_df['Amount'].astype(float)
+filtered_df['Account'] = filtered_df['Account'].astype(str)
+
+# Remove old columns
+filtered_df.drop(columns=['oldAccount', 'oldAmount'], inplace=True)
+
+# Display the final DataFrame
