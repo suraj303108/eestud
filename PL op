@@ -1,10 +1,1 @@
-import pandas as pd
-
-# The URL provided seems to be a SharePoint link, ensure you have access to the file
-url = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared%20Documents/General/GRM%20FS%20Data%20Strategy%20PROD/BL%20Topline/Support%20Files/CS%20to%20FS%20Mapping_%20PL_BL%20Distrib%20Codes.xlsx"
-
-# Read the Excel file into a DataFrame
-df = pd.read_excel(url, engine='openpyxl')
-
-# Print the first few rows to check
-print(df.head())
+pip show Office365-REST-Python-Client
