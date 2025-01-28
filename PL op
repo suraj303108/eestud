@@ -1,1 +1,20 @@
-https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared%20Documents/General/GRM%20FS%20Data%20Strategy%20PROD/BL%20Topline/Support%20Files/CS%20to%20FS%20Mapping_%20PL_BL%20Distrib%20Codes.xlsx
+from office365.sharepoint.client_context import ClientContext
+from office365.sharepoint.files.file import File
+
+# Provide your SharePoint credentials and site URL
+site_url = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy"
+username = "your_email@example.com"
+password = "your_password"
+
+ctx = ClientContext(site_url).with_credentials(username, password)
+file_url = "/sites/GRMFSDataStrategy/Shared Documents/General/GRM FS Data Strategy PROD/BL Topline/Support Files/CS to FS Mapping_ PL_BL Distrib Codes.xlsx"
+
+# Download the file
+response = File.open_binary(ctx, file_url)
+
+with open("file.xlsx", "wb") as local_file:
+    local_file.write(response.content)
+
+# Now you can read it with pandas
+df = pd.read_excel("file.xlsx", engine='openpyxl')
+print(df.head())
