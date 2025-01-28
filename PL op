@@ -1,37 +1,25 @@
-import pandas as pd
+sh
+pip install office365-rest-python-client
+Then, you can use the following code to authenticate and read a file from SharePoint:
 
-# Load your data into a DataFrame (replace 'data_source' with your actual data source)
-df = pd.read_csv('data_source.csv')
+python
+from office365.sharepoint.client_context import ClientContext
+from office365.runtime.auth.user_credential import UserCredential
 
-# Add custom column 'Product'
-df['Product'] = 'PRO'
+# SharePoint site and file details
+site_url = "https://yourtenant.sharepoint.com/sites/yoursite"
+file_url = "/sites/yoursite/Shared%20Documents/yourfile.txt"
 
-# Change type of 'Product' column to text (not needed in Python as pandas handles it)
-df['Product'] = df['Product'].astype(str)
+# Authentication details
+username = "yourusername@yourtenant.com"
+password = "yourpassword"
 
-# Filter rows based on 'Account' column values
-filtered_df = df[df['Account'].isin([
-    'NB Written Premium', 
-    'RB Written Premium', 
-    'Written Premium', 
-    'Audit & Retro Written Premium', 
-    'CUNA - NB WP', 
-    'CUNA - RB WP', 
-    'Written Premium Renewal Business'
-])]
+# Authenticate and create a client context
+ctx = ClientContext(site_url).with_credentials(UserCredential(username, password))
 
-# Rename columns
-filtered_df.rename(columns={'Amount': 'oldAmount', 'Account': 'oldAccount'}, inplace=True)
+# Read the file content
+file = ctx.web.get_file_by_server_relative_url(file_url).download().execute_query()
+file_content = file.content
 
-# Add custom columns 'Amount' and 'Account'
-filtered_df['Amount'] = -filtered_df['oldAmount']
-filtered_df['Account'] = 'Earned Premium'
-
-# Change types of new columns (not needed in Python as pandas handles it)
-filtered_df['Amount'] = filtered_df['Amount'].astype(float)
-filtered_df['Account'] = filtered_df['Account'].astype(str)
-
-# Remove old columns
-filtered_df.drop(columns=['oldAccount', 'oldAmount'], inplace=True)
-
-# Display the final DataFrame
+# Print the file content
+print(file_content.decode(
