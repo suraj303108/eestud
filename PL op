@@ -1,1 +1,29 @@
-pip show Office365-REST-Python-Client
+from office365.sharepoint.client_context import ClientContext
+from office365.sharepoint.files.file import File
+from office365.runtime.auth.authentication_context import AuthenticationContext
+
+# The SharePoint site URL
+site_url = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy"
+
+# Create the authentication context and perform interactive login
+auth_context = AuthenticationContext(site_url)
+if auth_context.acquire_token_for_user("your_email@example.com", "your_password"):
+    # After acquiring the token, create the client context
+    ctx = ClientContext(site_url, auth_context)
+
+    # The file path on SharePoint (relative to the root of the SharePoint site)
+    file_url = "/sites/GRMFSDataStrategy/Shared Documents/General/GRM FS Data Strategy PROD/BL Topline/Support Files/CS to FS Mapping_ PL_BL Distrib Codes.xlsx"
+
+    # Download the file
+    response = File.open_binary(ctx, file_url)
+
+    # Save the file locally
+    with open("file.xlsx", "wb") as local_file:
+        local_file.write(response.content)
+
+    # Read the file with pandas
+    import pandas as pd
+    df = pd.read_excel("file.xlsx", engine='openpyxl')
+    print(df.head())
+else:
+    print("Authentication failed!")
