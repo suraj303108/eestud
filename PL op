@@ -1,1 +1,12 @@
-I am making a detailed documents for LM on best practices around pbi data model, pbi report refresh, pbi issue management. Saurabh suggested me your name to take some inputs on that.
+import pandas as pd
+import datetime
+ 
+print(datetime.datetime.now())
+df=pd.read_csv(r"\\Pdc-aip-data\ets_essbase_gcm_nas_t3_prod01\Year End Rollover\Shagun\USGL_PL_CY_24Jan.csv",header=0,dtype={'Index':int,'Year':str,'Account':str,'RI':str,'Line':str,'Distrib':str,'State':str,'Product':str,'Rpt_ENT':str,'Month':str,'Data':float})
+df2=df.query("Month!='Begin'")
+df2['ModifiedDate']=pd.to_datetime(pd.to_datetime(df2['Month'],format='%b').dt.month.astype(str)+'/01/20'+df2['Year'])
+df2.to_parquet(r"\\Pdc-aip-data\ets_essbase_gcm_nas_t3_prod01\Year End Rollover\Shagun\USGL_PL_CY_24Jan.parquet",compression='snappy',index=False)
+df_gl_24janp= pd.read_parquet("//pdc-aip-data//ets_essbase_gcm_nas_t3_prod01//Year End Rollover//Shagun//USGL_PL_CY_24Jan.parquet", engine='pyarrow')
+df_state_pq24j=df_gl_24janp['State'].value_counts()
+df_ent_pq24j=df_gl_24janp['Rpt_ENT'].value_counts()
+print(datetime.datetime.now())
