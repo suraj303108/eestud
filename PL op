@@ -1,12 +1,19 @@
 import pandas as pd
-import datetime
- 
-print(datetime.datetime.now())
-df=pd.read_csv(r"\\Pdc-aip-data\ets_essbase_gcm_nas_t3_prod01\Year End Rollover\Shagun\USGL_PL_CY_24Jan.csv",header=0,dtype={'Index':int,'Year':str,'Account':str,'RI':str,'Line':str,'Distrib':str,'State':str,'Product':str,'Rpt_ENT':str,'Month':str,'Data':float})
-df2=df.query("Month!='Begin'")
-df2['ModifiedDate']=pd.to_datetime(pd.to_datetime(df2['Month'],format='%b').dt.month.astype(str)+'/01/20'+df2['Year'])
-df2.to_parquet(r"\\Pdc-aip-data\ets_essbase_gcm_nas_t3_prod01\Year End Rollover\Shagun\USGL_PL_CY_24Jan.parquet",compression='snappy',index=False)
-df_gl_24janp= pd.read_parquet("//pdc-aip-data//ets_essbase_gcm_nas_t3_prod01//Year End Rollover//Shagun//USGL_PL_CY_24Jan.parquet", engine='pyarrow')
-df_state_pq24j=df_gl_24janp['State'].value_counts()
-df_ent_pq24j=df_gl_24janp['Rpt_ENT'].value_counts()
-print(datetime.datetime.now())
+
+# Load the Excel files into pandas DataFrames
+forecast = pd.read_excel("path/to/forecast.xlsx", engine='openpyxl')
+plan = pd.read_excel("path/to/plan.xlsx", engine='openpyxl')
+
+# Merge the two datasets on the common columns
+merged_data = pd.merge(forecast, plan, on=['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type'], 
+                       suffixes=('_forecast', '_plan'), how='left')
+
+# Compare the rates and create a new column to indicate whether they match
+merged_data['rate_comparison'] = merged_data.apply(lambda row: 'Match' if row['rate_forecast'] == row['rate_plan'] else 'Mismatch', axis=1)
+
+# View the comparison results
+print(merged_data[['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type', 'rate_forecast', 'rate_plan', 'rate_comparison']])
+
+# Optionally, filter to show only mismatched rows
+mismatched_data = merged_data[merged_data['rate_comparison'] == 'Mismatch']
+print(mismatched_data[['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type', 'rate_forecast', 'rate_plan']])
