@@ -4,6 +4,10 @@ import pandas as pd
 forecast = pd.read_excel("path/to/forecast.xlsx", engine='openpyxl')
 plan = pd.read_excel("path/to/plan.xlsx", engine='openpyxl')
 
+# Ensure the 'date' columns are in datetime format
+forecast['date'] = pd.to_datetime(forecast['date'])
+plan['date'] = pd.to_datetime(plan['date'])
+
 # Merge the two datasets on the common columns
 merged_data = pd.merge(forecast, plan, on=['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type'], 
                        suffixes=('_forecast', '_plan'), how='left')
@@ -11,9 +15,12 @@ merged_data = pd.merge(forecast, plan, on=['date', 'lob', 'state', 'reinsurance'
 # Compare the rates and create a new column to indicate whether they match
 merged_data['rate_comparison'] = merged_data.apply(lambda row: 'Match' if row['rate_forecast'] == row['rate_plan'] else 'Mismatch', axis=1)
 
-# View the comparison results
-print(merged_data[['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type', 'rate_forecast', 'rate_plan', 'rate_comparison']])
+# Filter for rows where the year is 2024
+merged_data_2024 = merged_data[merged_data['date'].dt.year == 2024]
 
-# Optionally, filter to show only mismatched rows
-mismatched_data = merged_data[merged_data['rate_comparison'] == 'Mismatch']
-print(mismatched_data[['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type', 'rate_forecast', 'rate_plan']])
+# View the comparison results for 2024
+print(merged_data_2024[['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type', 'rate_forecast', 'rate_plan', 'rate_comparison']])
+
+# Optionally, filter to show only mismatched rows for 2024
+mismatched_data_2024 = merged_data_2024[merged_data_2024['rate_comparison'] == 'Mismatch']
+print(mismatched_data_2024[['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type', 'rate_forecast', 'rate_plan']])
