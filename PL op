@@ -1,1 +1,7 @@
-historical_ddf['BookDate']=pd.to_datetime(pd.to_datetime(historical_ddf['Month'],format='%b').dt.month.astype(str)+'/01/20'+historical_ddf['Year'])
+historical_ddf['BookDate'] = pd.to_datetime(
+    historical_ddf['Month'].astype(str) + '/01/' + historical_ddf['Year'].astype(str),
+    format='%m/%d/%Y'
+)
+
+# Now format the datetime to '1Jan2023'
+historical_ddf['FormattedDate'] = historical_ddf['BookDate'].dt.strftime('%d%b%Y')
