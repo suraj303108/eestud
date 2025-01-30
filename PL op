@@ -1,65 +1,13 @@
 import pandas as pd
 
-# Load your data (replace with actual data loading process, e.g., read from CSV, Excel, etc.)
-# Assuming the datasets are already loaded into pandas DataFrames: mr_final_df, gl_state_alloc_df
-# Example:
-# mr_final_df = pd.read_excel('/path_to_mr_final.xlsx')
-# gl_state_alloc_df = pd.read_excel('/path_to_gl_state_alloc.xlsx')
+# Load the historical and cy CSV files
+historical_df = pd.read_csv('historical.csv')
+cy_df = pd.read_csv('cy.csv')
 
-# Step 1: Calculate the 'Grouped' EP (Earned Premium) in 'Auto Liab' and 'Auto PD'
-gpd = mr_final_df[
-    mr_final_df['GL_LOB'].isin(['Auto Liab', 'Auto PD']) & (mr_final_df['Amount1'] > 0)
-].groupby(['Line', 'GL_LOB', 'Coverage', 'Term'], as_index=False).agg(
-    EP=('Amount1', lambda x: (x[mr_final_df['Account'] == 'Earned Premium']).sum())
-)
+# Append cy_df to historical_df
+combined_df = historical_df.append(cy_df, ignore_index=True)
 
-# Step 2: Calculate the 'Ungrouped' EP by summing over the GL_LOB
-ugpd = mr_final_df[
-    mr_final_df['GL_LOB'].isin(['Auto Liab', 'Auto PD']) & (mr_final_df['Amount1'] > 0)
-].groupby('GL_LOB', as_index=False).agg(
-    EP=('Amount1', lambda x: (x[mr_final_df['Account'] == 'Earned Premium']).sum())
-)
+# Save the result back to a new CSV file (optional)
+combined_df.to_csv('combined_historical.csv', index=False)
 
-# Step 3: Merge the grouped and ungrouped data to calculate Alloc_Stat
-auto_allocation_stats = pd.merge(gpd, ugpd, on='GL_LOB', how='outer', suffixes=('_Grouped', '_Ungrouped'))
-auto_allocation_stats['Alloc_Stat'] = auto_allocation_stats['EP_Grouped'] / auto_allocation_stats['EP_Ungrouped']
-
-# Filter out rows where Alloc_Stat is less than or equal to 0
-auto_allocation_stats = auto_allocation_stats[auto_allocation_stats['Alloc_Stat'] > 0]
-
-# Step 4: Join the `GL_state_alloc` with `auto_allocation_stats` to calculate Amount
-auto = pd.merge(
-    gl_state_alloc_df[gl_state_alloc_df['GL_LOB'].isin(['Auto Liab', 'Auto PD'])],
-    auto_allocation_stats[['Line', 'GL_LOB', 'Term', 'Coverage', 'Alloc_Stat']],
-    on='GL_LOB',
-    how='inner'
-)
-
-# Apply conditions for Account and compute Amount
-account_filter = [
-    'APS', 'Acquisition', 'Administrative', 'Administrative Expense Paid',
-    'Amortization - DAC Commissions', 'Amortization - DAC General Exp', 
-    'Amortization - DAC Prem Tax', 'Amortization of DAC', 'Base Commissions',
-    'Billing Fees', 'CAT ULAE', 'Capitalization - DAC Commissions',
-    'Capitalization - DAC General Exp', 'Capitalization - DAC Prem Tax',
-    'Capitalization of DAC', 'Change ALAE IBNR Rsv CY CAT',
-    'Change ALAE IBNR Rsv CY NonCAT', 'Change ALAE IBNR Rsv PY CAT',
-    'Change ALAE IBNR Rsv PY NonCAT', 'Change Loss IBNR Rsv CY CAT',
-    'Change Loss IBNR Rsv CY NonCAT', 'Change Loss IBNR Rsv PY CAT',
-    'Change Loss IBNR Rsv PY NonCAT', 'Changes in ULAE Res', 'Charge-offs',
-    'Chg Commissions Reserve', 'Chg in Admin Expense Reserve', 'Commissions Paid',
-    'Goodwill Amortization', 'Misc Income', 'Net Investment Income', 'Non-CAT ULAE',
-    'Non-Traditional Revenue', 'Other Acq. Exp. Chg Reserve', 'Other Acq. Exp. Paid',
-    'Other Bonus', 'Other Revenue', 'Premium and Other Taxes', 'ULAE Paid Expenses'
-]
-
-auto_filtered = auto[
-    auto['Account'].isin(account_filter)
-].copy()
-
-# Calculate the final Amount
-auto_filtered['Amount'] = auto_filtered['Amount1'] * auto_filtered['Alloc_Stat']
-
-# Step 5: The final dataframe is `auto_filtered` which is equivalent to WORK.auto
-# You can now save this DataFrame to a CSV file or perform further analysis
-auto_filtered.to_csv(f'auto_{filedate}.csv', index=False)
+print("Files have been combined successfully!")
