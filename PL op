@@ -1,4 +1,54 @@
-Step 1: Calculate pairwise similarity scores between users.
-Step 2: For each user, find the top N most similar users.
-Step 3: Aggregate the ratings of products from the most similar users and suggest those products to the user.
-Step 4: Exclude products the user has already interacted with from the recommendations.
+
+
+%LET vyearcalc = %SYSFUNC(YEAR(%SYSFUNC(INTNX(MONTH, %SYSFUNC(TODAY()), -1))));
+%LET vyear = PUT(&vyearcalc, z4.);
+%LET filedate = %SYSFUNC(TODAY(),MMDDYYP10.);
+
+PROC SQL;
+   CREATE TABLE GRIDWORK.Financial_Trending AS 
+   SELECT t1.BKD_YR, 
+          t1.BKD_MONTH, 
+          t1.LOB, 
+		  t1.LOB_CTRL,
+          /* SUM_of_WRIT_PREM_AMT */
+            (SUM(t1.WRIT_PREM_AMT)) FORMAT=20.5 AS SUM_of_WRIT_PREM_AMT, 
+          /* SUM_of_ERND_PREM_AMT */
+            (SUM(t1.ERND_PREM_AMT)) FORMAT=20.5 AS SUM_of_ERND_PREM_AMT 
+      FROM SF_FNRPT.f_FINANCE_SUMMARY t1
+      WHERE t1.BKD_YR = &vyear
+      GROUP BY t1.BKD_YR,
+               t1.BKD_MONTH,
+               t1.LOB,
+			   t1.LOB_CTRL
+      ORDER BY 
+               t1.LOB,
+			   t1.LOB_CTRL,
+               t1.BKD_YR,
+               t1.BKD_MONTH;
+QUIT;
+PROC EXPORT DATA=GRIDWORK.Financial_Trending
+FILE="/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Local_Access/Fin/Reports/MRBookCloseValidation/Financial_Trending_Prem &filedate..csv"
+DBMS=CSV
+REPLACE;
+RUN;
+QUIT;
+
+
+ FILENAME Mailbox EMAIL;
+DATA _NULL_;
+		FILE Mailbox 
+	TO=('MSR_SYS_SUPPORT@LibertyMutual.com'
+'Kendrick.Perry@LibertyMutual.com'
+'carmen.louie@libertymutual.com'
+'shagun.agarwal@libertymutual.com'
+'mahalakshmi.kadirannagaripally@libertymutual.com'
+/*'kavisha.gupta@libertymutual.com'*/
+/*'amit.kumar13@libertymutual.com'*/
+'daniel.sepulveda@libertymutual.com')
+    ATTACH=("/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Local_Access/Fin/Reports/MRBookCloseValidation/Financial_Trending_Prem &filedate..csv"
+	CONTENT_TYPE="text/html")
+	SUBJECT="Management Reporting Financial Trending Premium Book Close Validation";
+	PUT "Please see the attached MR Financial Trending Premium Book Close Validations. PLEASE NOTE: This is an automated email. Please contact Kendrick Perry at Kendrick.Perry@LibertyMutual.com with any questions.";
+	RUN;
+	QUIT;
+
