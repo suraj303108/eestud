@@ -1,11 +1,4 @@
-You are working for an e-commerce company that sells various products. The company wants to implement a recommendation system to suggest products to users based on their past behavior (previously purchased items, items viewed, and product ratings). You need to design a basic recommendation system using Python.
-
-Your task is to implement the following:
-
-Data Representation:
-You have a list of users, and each user has a list of products they have interacted with (either purchased or viewed). Each interaction can also have a rating (from 1 to 5).
-Objective:
-Implement a basic recommendation system that suggests products for a user based on their past interactions and similarities with other users.
-Requirements:
-Users who have similar product interactions should receive similar recommendations.
-The recommendation should be based on collaborative filtering (user-based or item-based).
+Step 1: Calculate pairwise similarity scores between users.
+Step 2: For each user, find the top N most similar users.
+Step 3: Aggregate the ratings of products from the most similar users and suggest those products to the user.
+Step 4: Exclude products the user has already interacted with from the recommendations.
