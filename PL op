@@ -1,13 +1,1 @@
-import dask.dataframe as dd
-
-# Read in the historical and cy files using Dask
-historical_ddf = dd.read_csv('historical.csv')
-cy_ddf = dd.read_csv('cy.csv')
-
-# Concatenate the two Dask dataframes
-combined_ddf = dd.concat([historical_ddf, cy_ddf])
-
-# Write the combined data back to a CSV file (dask can handle large writes too)
-combined_ddf.to_csv('combined_historical.csv', index=False, single_file=True)
-
-print("Files have been combined successfully!")
+historical_ddf['BookDate']=pd.to_datetime(pd.to_datetime(historical_ddf['Month'],format='%b').dt.month.astype(str)+'/01/20'+historical_ddf['Year'])
