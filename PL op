@@ -1,13 +1,24 @@
 import pandas as pd
 
-# Load the historical and cy CSV files
-historical_df = pd.read_csv('historical.csv')
-cy_df = pd.read_csv('cy.csv')
+# Define chunk size
+chunk_size = 100000  # Adjust this based on your system's memory capacity
 
-# Append cy_df to historical_df
-combined_df = historical_df.append(cy_df, ignore_index=True)
+# Define the column data types if known (optional, but can save memory)
+dtype = {
+    'col1': 'int32',  # Example: replace 'col1' with actual column names
+    'col2': 'float32',
+    # Add more columns as needed
+}
 
-# Save the result back to a new CSV file (optional)
-combined_df.to_csv('combined_historical.csv', index=False)
+# Open the historical file to append to it
+with pd.read_csv('historical.csv', chunksize=chunk_size, dtype=dtype) as historical_reader:
+    # Open the cy file in chunks
+    for chunk in pd.read_csv('cy.csv', chunksize=chunk_size, dtype=dtype):
+        for historical_chunk in historical_reader:
+            # Concatenate the historical chunk and cy chunk
+            combined_df = pd.concat([historical_chunk, chunk], ignore_index=True)
+            
+            # Save the result to a new file incrementally (optional)
+            combined_df.to_csv('combined_historical.csv', mode='a', header=False, index=False)
 
 print("Files have been combined successfully!")
