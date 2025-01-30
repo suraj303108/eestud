@@ -1,64 +1,184 @@
-import pandas as pd
-import numpy as np
-from datetime import datetime
+/*----01/15/2024 Added code for certainly auto distribution in line26 for GRMFDP -1377 by Shagun Agarwal----*/
+LibName REF '/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Fin_HO_Sec/Topline/Reference';
 
-# Assuming you already have data loaded into DataFrames (t1, t2, t3, t4) 
-# which are the equivalent of your SAS tables (SF_FNRPT.f_FINANCE_SUMMARY, REF.MR_LOB_REF)
-# You'll need to load your data into pandas DataFrames (e.g., using pd.read_csv, pd.read_sql, etc.)
+proc sql;
 
-# Example mock DataFrames (replace with actual data loading logic)
-# t1 = pd.read_sql("SELECT * FROM SF_FNRPT.f_FINANCE_SUMMARY", conn)
-# t2 = pd.read_sql("SELECT * FROM REF.MR_LOB_REF", conn)
+create table work.pcp_temp as
 
-# Define the variables (bookClose, currentYear, priorYear, currentMonth, priorMonth)
-bookClose = datetime.strptime('01Nov2024', '%d%b%Y')
-currentYear = bookClose.year
-currentMonth = bookClose.month
-priorMonth = (bookClose.replace(day=1) - pd.DateOffset(months=1)).month
-priorYear = (bookClose.replace(day=1) - pd.DateOffset(months=1)).year
+select
+	&bookClose format=date9. as BookDate,
+	pcp.Reinsurance,
+	stat.State,
+	pcp.PRODUCT as Product,
+	case
+		when pcp.MLOB = '0771' and pcp.PRODUCT = 'HO' then 'Dwelling'
+		when pcp.MLOB = '0771' and pcp.PRODUCT = '0CD' then 'Condo'
+		when pcp.MLOB = '0771' and pcp.PRODUCT = '0DW' then 'Dwelling'
+		when pcp.MLOB = '0771' and pcp.PRODUCT = '0TE' then 'Renter'
+		when pcp.MLOB = '0771' and pcp.PRODUCT not in ('HO','0CD','0DW','0TE') then 'Dwelling'
+		when pcp.MLOB = '0310' and pcp.PRODUCT = 'PU' then 'Umbrella'
+		else lob.ALIAS end as Line,
+	lob.GL_LOB,
+	lob.PRE_ALLOC_LOB As PRE_ALLOC_LOB, 
+	case
+		when dist.Alias contains ("Invol") then "Involuntary" else "Voluntary" end as Vol_Invol,
+	case
+		when dist.Code = ' ' then 'Distribution N/A'
+		when dist.Code = '0230' then 'Certainly Auto'
+		else dist.USGL end as Distribution,
+	case
+		when dist.Code = ' ' then 'Liberty'
+		else dist.Brand end as Brand,
+	case when acct.'USGL Account'n = 'Other Revenue' then pcp.AMOUNTS else 0 end as 'Other Revenue'n,
+	case when acct.'USGL Account'n = 'Net Investment Income' then pcp.AMOUNTS else 0 end as 'Net Investment Income'n,
+	case when acct.'USGL Account'n = 'Change ALAE IBNR Rsv CY CAT' then pcp.AMOUNTS else 0 end as 'Change ALAE IBNR Rsv CY CAT'n,
+	case when acct.'USGL Account'n = 'Change ALAE IBNR Rsv CY NonCAT' then pcp.AMOUNTS else 0 end as 'Change ALAE IBNR Rsv CY NonCAT'n,
+	case when acct.'USGL Account'n = 'Change ALAE IBNR Rsv PY CAT' then pcp.AMOUNTS else 0 end as 'Change ALAE IBNR Rsv PY CAT'n,
+	case when acct.'USGL Account'n = 'Change ALAE IBNR Rsv PY NonCAT' then pcp.AMOUNTS else 0 end as 'Change ALAE IBNR Rsv PY NonCAT'n,
+	case when acct.'USGL Account'n = 'Change Loss IBNR Rsv CY CAT' then pcp.AMOUNTS else 0 end as 'Change Loss IBNR Rsv CY CAT'n,
+	case when acct.'USGL Account'n = 'Change Loss IBNR Rsv CY NonCAT' then pcp.AMOUNTS else 0 end as 'Change Loss IBNR Rsv CY NonCAT'n,
+	case when acct.'USGL Account'n = 'Change Loss IBNR Rsv PY CAT' then pcp.AMOUNTS else 0 end as 'Change Loss IBNR Rsv PY CAT'n,
+	case when acct.'USGL Account'n = 'Change Loss IBNR Rsv PY NonCAT' then pcp.AMOUNTS else 0 end as 'Change Loss IBNR Rsv PY NonCAT'n,
+	case when acct.'USGL Account'n = 'Non-Traditional Revenue' then pcp.AMOUNTS else 0 end as 'Non-Traditional Revenue'n,
+	case when acct.'USGL Account'n = 'Premium and Other Taxes' then pcp.AMOUNTS else 0 end as 'Premium and Other Taxes'n,
+	case when acct.'USGL Account'n = 'Billing Fees' then pcp.AMOUNTS else 0 end as 'Billing Fees'n,
+	case when acct.'USGL Account'n = 'Misc Income' then pcp.AMOUNTS else 0 end as 'Misc Income'n,
+	case when acct.'USGL Account'n = 'ULAE Paid Expenses' then pcp.AMOUNTS else 0 end as 'ULAE Paid Expenses'n,
+	case when acct.'USGL Account'n = 'Changes in ULAE Res' then pcp.AMOUNTS else 0 end as 'Changes in ULAE Res'n,
+	case when acct.'USGL Account'n = 'Amortization of DAC' then pcp.AMOUNTS else 0 end as 'Amortization of DAC'n,
+	case when acct.'USGL Account'n = 'Capitalization of DAC' then pcp.AMOUNTS else 0 end as 'Capitalization of DAC'n,
+	case when acct.'USGL Account'n = 'Administrative Expense Paid' then pcp.AMOUNTS else 0 end as 'Administrative Expense Paid'n,
+	case when acct.'USGL Account'n = 'Chg in Admin Expense Reserve' then pcp.AMOUNTS else 0 end as 'Chg in Admin Expense Reserve'n,
+	case when acct.'USGL Account'n = 'Commissions Paid' then pcp.AMOUNTS else 0 end as 'Commissions Paid'n,
+	case when acct.'USGL Account'n = 'Chg Commissions Reserve'  then pcp.AMOUNTS else 0 end as 'Chg Commissions Reserve'n,
+	case when acct.'USGL Account'n = 'Other Acq. Exp. Paid'  then pcp.AMOUNTS else 0 end as 'Other Acq. Exp. Paid'n,
+	case when acct.'USGL Account'n = 'Other Acq. Exp. Chg Reserve'  then pcp.AMOUNTS else 0 end as 'Other Acq. Exp. Chg Reserve'n,
+	case when acct.'USGL Account'n = 'Charge-offs' then pcp.AMOUNTS else 0 end as 'Charge-offs'n,
+	case when acct.'USGL Account'n = 'Goodwill Amortization' then pcp.AMOUNTS else 0 end as 'Goodwill Amortization'n
+from (
 
-# Step 1: MR_temp table (creating the temporary table using SQL-style aggregation)
+	select 
+		ACCNT,
+		EFFYR,
+		EFFMTH,
+		case
+			when RI in ('10','11') then 'DIRECT'
+			when RI = '72' then 'HSCM'
+			when RI = ' ' then 'RI N/A'
+			else RI end as Reinsurance,
+		DIST,
+		PRODUCT,
+		MLOB,
+		STATE,
+		sum(AMOUNTS) format 20.5 as AMOUNTS 
+	from SF_FNRPT.ODS_PCP_GL_FEED
+	where EFFYR = input(&currentYear,4.) and EFFMTH = input(&currentMonth,2.)
+	and CORP = 'PCP'
+	and trim(RI) in ('10','11','17','19','GP','72','GE','G1','G2','G3','G4', '') 
+	and DIST not in ('CEAK','0PCC','SA01', 'SA02', 'SA11', 'SA21', 'SA99') 
+	and RPTENT not = '3000'
+	and ODS_EXP_ROW_DTM ='9999-12-31 23:59:59'd
+	and ODS_CDC_TRANS_TYPE not = 'D'
+	group by 1,2,3,4,5,6,7,8
 
-# Create t1 (and t2) DataFrames, join them, apply case conditions
-# In pandas, we can use the `np.where` or `apply` function to handle conditions
-t1['State'] = t1['CVRG_ST_ABBR_CD'].apply(lambda x: 'State NA' if x in [' ', '', 'XX'] else x)
-t1['Distribution'] = t1['DSTBTN_CD'].apply(lambda x: 'D0000' if x == '~' else x)
-t1['Vol_Invol'] = t1['VOLNTRY_INVOL_CD'].apply(lambda x: 'Voluntary' if x in [' ', '', '~'] else x)
+) pcp
 
-# Group by the relevant columns and aggregate the sums
-MR_temp = t1.groupby(['BUS_TYPE', 'CVRG_ST_ABBR_CD', 'DSTBTN_CD', 'LOB', 'GL_LOB', 'CVRG_TYP', 'POLICY_TERM_CD', 'VOLNTRY_INVOL_CD']).agg(
-    Written_Premium_NB=('WRIT_PREM_AMT', lambda x: x[t1['NEW_RNWL_DESC'] == 'NEW'].sum()),
-    Written_Premium_RB=('WRIT_PREM_AMT', lambda x: x[t1['NEW_RNWL_DESC'] == 'RENEWAL'].sum()),
-    Earned_Premium=('ERND_PREM_AMT', 'sum'),
-    CY_CAT_Loss_Paid=('NET_LOSS_PAID_AMT', lambda x: x[(t1['PY_CY_IND'] == 'CY') & (t1['CAT_IND'] == 'Y')].sum()),
-    CY_Non_CAT_Loss_Paid=('NET_LOSS_PAID_AMT', lambda x: x[(t1['PY_CY_IND'] == 'CY') & (t1['CAT_IND'] == 'N')].sum()),
-    PY_CAT_Loss_Paid=('NET_LOSS_PAID_AMT', lambda x: x[(t1['PY_CY_IND'] == 'PY') & (t1['CAT_IND'] == 'Y')].sum()),
-    PY_Non_CAT_Loss_Paid=('NET_LOSS_PAID_AMT', lambda x: x[(t1['PY_CY_IND'] == 'PY') & (t1['CAT_IND'] == 'N')].sum())
-).reset_index()
+inner join REF.PCP_ACCOUNT_REF acct ON (pcp.ACCNT = acct.'Account'n)
+left join REF.PCP_DISTRIB_REF dist ON (pcp.DIST = dist.Code)
+left join REF.PCP_LOB_REF lob ON (pcp.MLOB = lob.MLOB)
+left join REF.PCP_State_REF stat ON (pcp.State = stat.State_Code)
+where acct.'USGL Account'n not = ' ' and lob.ALIAS not = 'Commercial Liability'
 
-# Apply other aggregations for ALAE and reserves (CY and PY) similarly
+;quit;
 
-# Step 2: MR_agg table (grouping and summing values)
-MR_agg = MR_temp.groupby(['BookDate', 'Reinsurance', 'State', 'Distribution', 'Line', 'GL_LOB', 'Coverage', 'Term', 'Vol_Invol']).agg(
-    Written_Premium_NB=('Written_Premium_NB', 'sum'),
-    Written_Premium_RB=('Written_Premium_RB', 'sum'),
-    Earned_Premium=('Earned_Premium', 'sum'),
-    CY_CAT_Loss_Paid=('CY_CAT_Loss_Paid', 'sum'),
-    CY_Non_CAT_Loss_Paid=('CY_Non_CAT_Loss_Paid', 'sum'),
-    PY_CAT_Loss_Paid=('PY_CAT_Loss_Paid', 'sum'),
-    PY_Non_CAT_Loss_Paid=('PY_Non_CAT_Loss_Paid', 'sum')
-).reset_index()
+proc sql;
 
-# Step 3: Transpose the data (equivalent of PROC TRANSPOSE in SAS)
-MR_Final = pd.melt(MR_agg, id_vars=['BookDate', 'Reinsurance', 'State', 'Distribution', 'Line', 'GL_LOB', 'Coverage', 'Term', 'Vol_Invol'], 
-                   value_vars=['Written_Premium_NB', 'Written_Premium_RB', 'Earned_Premium', 'CY_CAT_Loss_Paid', 
-                               'CY_Non_CAT_Loss_Paid', 'PY_CAT_Loss_Paid', 'PY_Non_CAT_Loss_Paid'], 
-                   var_name='Account', value_name='Amount')
+create table work.pcp_agg as
 
-# Step 4: Export the final DataFrame to a CSV or database
-MR_Final.to_csv('MR_Final.csv', index=False)
+select
+	BookDate,
+	Reinsurance,
+	State,
+	Product,
+	Line,
+	GL_LOB,
+	PRE_ALLOC_LOB,
+	Vol_Invol,
+	Distribution,
+	Brand,
+	sum('Other Revenue'n) as 'Other Revenue'n,
+	sum('Net Investment Income'n) as 'Net Investment Income'n,
+	sum('Billing Fees'n) as 'Billing Fees'n,
+	sum('Non-Traditional Revenue'n) as 'Non-Traditional Revenue'n,
+	sum('Premium and Other Taxes'n) as 'Premium and Other Taxes'n,
+	sum('Charge-offs'n) as 'Charge-offs'n,
+	sum('Goodwill Amortization'n) as 'Goodwill Amortization'n,
+	sum('Misc Income'n) as 'Misc Income'n,
+	sum('Change Loss IBNR Rsv CY CAT'n) as 'Change Loss IBNR Rsv CY CAT'n,
+	sum('Change Loss IBNR Rsv PY CAT'n) as 'Change Loss IBNR Rsv PY CAT'n,
+	sum('Change Loss IBNR Rsv CY NonCAT'n) as 'Change Loss IBNR Rsv CY NonCAT'n,
+	sum('Change Loss IBNR Rsv PY NonCAT'n) as 'Change Loss IBNR Rsv PY NonCAT'n,
+	sum('Change ALAE IBNR Rsv CY CAT'n) as 'Change ALAE IBNR Rsv CY CAT'n,
+	sum('Change ALAE IBNR Rsv PY CAT'n) as 'Change ALAE IBNR Rsv PY CAT'n,
+	sum('Change ALAE IBNR Rsv CY NonCAT'n) as 'Change ALAE IBNR Rsv CY NonCAT'n,
+	sum('Change ALAE IBNR Rsv PY NonCAT'n) as 'Change ALAE IBNR Rsv PY NonCAT'n,
+	sum('ULAE Paid Expenses'n) as 'ULAE Paid Expenses'n,
+	sum('Changes in ULAE Res'n) as 'Changes in ULAE Res'n,
+	sum('Amortization of DAC'n) as 'Amortization of DAC'n,
+	sum('Capitalization of DAC'n) as 'Capitalization of DAC'n,
+	sum('Administrative Expense Paid'n) as 'Administrative Expense Paid'n,
+	sum('Chg in Admin Expense Reserve'n) as 'Chg in Admin Expense Reserve'n,
+	sum('Commissions Paid'n) as 'Commissions Paid'n,
+	sum('Chg Commissions Reserve'n) as 'Chg Commissions Reserve'n,
+	sum('Other Acq. Exp. Paid'n) as 'Other Acq. Exp. Paid'n,
+	sum('Other Acq. Exp. Chg Reserve'n) as 'Other Acq. Exp. Chg Reserve'n
 
-# For SQLite or SQLAlchemy
-# MR_Final.to_sql('MR_Final', conn, if_exists='replace', index=False)
+from work.pcp_temp
+group by 1,2,3,4,5,6,7,8,9,10
+order by 1,2,3,4,5,6,7,8,9,10
 
-print("Process completed.")
+;quit;
+
+PROC TRANSPOSE DATA=WORK.pcp_agg
+	OUT=WORK.pcp_transpose
+	PREFIX=Amount
+	NAME=Account
+	LABEL=Account
+;
+	BY BookDate Reinsurance State Product Line GL_LOB PRE_ALLOC_LOB Vol_Invol Distribution Brand;
+	VAR 'Other Revenue'n
+		'Net Investment Income'n
+		'Billing Fees'n
+		'Non-Traditional Revenue'n
+		'Premium and Other Taxes'n
+		'Charge-offs'n
+		'Goodwill Amortization'n
+		'Misc Income'n
+		'Change Loss IBNR Rsv CY CAT'n
+		'Change Loss IBNR Rsv PY CAT'n
+		'Change Loss IBNR Rsv CY NonCAT'n
+		'Change Loss IBNR Rsv PY NonCAT'n
+		'Change ALAE IBNR Rsv CY CAT'n
+		'Change ALAE IBNR Rsv PY CAT'n
+		'Change ALAE IBNR Rsv CY NonCAT'n
+		'Change ALAE IBNR Rsv PY NonCAT'n
+		'ULAE Paid Expenses'n
+		'Changes in ULAE Res'n
+		'Amortization of DAC'n
+		'Capitalization of DAC'n
+		'Administrative Expense Paid'n
+		'Chg in Admin Expense Reserve'n
+		'Commissions Paid'n
+		'Chg Commissions Reserve'n
+		'Other Acq. Exp. Paid'n
+		'Other Acq. Exp. Chg Reserve'n;
+RUN; QUIT;
+
+proc sql;
+
+create table work.pcp_final as
+
+select * from work.pcp_transpose
+where Amount1 NOT = 0
+
+;quit;
