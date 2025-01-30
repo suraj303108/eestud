@@ -1,26 +1,10 @@
-import pandas as pd
+1. What is the difference between deepcopy and shallow copy in Python?
+Answer:
 
-# Load the Excel files into pandas DataFrames
-forecast = pd.read_excel("path/to/forecast.xlsx", engine='openpyxl')
-plan = pd.read_excel("path/to/plan.xlsx", engine='openpyxl')
-
-# Ensure the 'date' columns are in datetime format
-forecast['date'] = pd.to_datetime(forecast['date'])
-plan['date'] = pd.to_datetime(plan['date'])
-
-# Merge the two datasets on the common columns
-merged_data = pd.merge(forecast, plan, on=['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type'], 
-                       suffixes=('_forecast', '_plan'), how='left')
-
-# Compare the rates and create a new column to indicate whether they match
-merged_data['rate_comparison'] = merged_data.apply(lambda row: 'Match' if row['rate_forecast'] == row['rate_plan'] else 'Mismatch', axis=1)
-
-# Filter for rows where the year is 2024
-merged_data_2024 = merged_data[merged_data['date'].dt.year == 2024]
-
-# View the comparison results for 2024
-print(merged_data_2024[['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type', 'rate_forecast', 'rate_plan', 'rate_comparison']])
-
-# Optionally, filter to show only mismatched rows for 2024
-mismatched_data_2024 = merged_data_2024[merged_data_2024['rate_comparison'] == 'Mismatch']
-print(mismatched_data_2024[['date', 'lob', 'state', 'reinsurance', 'brand', 'rate_type', 'rate_forecast', 'rate_plan']])
+Shallow copy: A shallow copy creates a new object, but it doesn't create copies of nested objects. Instead, it just references the original objects inside the copied object. For example, if the original list has a nested list, both the original and copied lists will refer to the same nested list.
+Example: list1 = [1, [2, 3]], list2 = list1.copy()
+Any change to the nested list in list2 will also affect list1.
+Deep copy: A deep copy creates a new object and recursively copies all objects found in the original. This means that changes to any nested objects in the copied object will not affect the original.
+Example: import copy
+list1 = [1, [2, 3]], list2 = copy.deepcopy(list1)
+Modifications in list2's nested list won't affect list1.
