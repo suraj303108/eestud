@@ -1,54 +1,96 @@
+import pandas as pd
+from datetime import datetime, timedelta
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import os
 
+# 1. Get the current year (previous year) and the current date
+current_date = datetime.today()
+previous_month = current_date - timedelta(days=30)  # approx. previous month
+vyear = previous_month.year  # get the year from the previous month
+filedate = current_date.strftime('%m%d%Y')  # MMDDYY format
 
-%LET vyearcalc = %SYSFUNC(YEAR(%SYSFUNC(INTNX(MONTH, %SYSFUNC(TODAY()), -1))));
-%LET vyear = PUT(&vyearcalc, z4.);
-%LET filedate = %SYSFUNC(TODAY(),MMDDYYP10.);
+# 2. Load your data (replace this with your actual data source, e.g., CSV, Excel)
+# Here we simulate data as an example
+data = {
+    'BKD_YR': [2024, 2024, 2024, 2024],
+    'BKD_MONTH': [1, 1, 2, 2],
+    'LOB': ['A', 'A', 'B', 'B'],
+    'LOB_CTRL': ['X', 'Y', 'X', 'Y'],
+    'WRIT_PREM_AMT': [1000, 2000, 1500, 2500],
+    'ERND_PREM_AMT': [900, 1800, 1400, 2300]
+}
 
-PROC SQL;
-   CREATE TABLE GRIDWORK.Financial_Trending AS 
-   SELECT t1.BKD_YR, 
-          t1.BKD_MONTH, 
-          t1.LOB, 
-		  t1.LOB_CTRL,
-          /* SUM_of_WRIT_PREM_AMT */
-            (SUM(t1.WRIT_PREM_AMT)) FORMAT=20.5 AS SUM_of_WRIT_PREM_AMT, 
-          /* SUM_of_ERND_PREM_AMT */
-            (SUM(t1.ERND_PREM_AMT)) FORMAT=20.5 AS SUM_of_ERND_PREM_AMT 
-      FROM SF_FNRPT.f_FINANCE_SUMMARY t1
-      WHERE t1.BKD_YR = &vyear
-      GROUP BY t1.BKD_YR,
-               t1.BKD_MONTH,
-               t1.LOB,
-			   t1.LOB_CTRL
-      ORDER BY 
-               t1.LOB,
-			   t1.LOB_CTRL,
-               t1.BKD_YR,
-               t1.BKD_MONTH;
-QUIT;
-PROC EXPORT DATA=GRIDWORK.Financial_Trending
-FILE="/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Local_Access/Fin/Reports/MRBookCloseValidation/Financial_Trending_Prem &filedate..csv"
-DBMS=CSV
-REPLACE;
-RUN;
-QUIT;
+# Create a DataFrame (you can replace this with pd.read_csv or another data source)
+df = pd.DataFrame(data)
 
+# 3. Filter data for the given year (vyear)
+df_filtered = df[df['BKD_YR'] == vyear]
 
- FILENAME Mailbox EMAIL;
-DATA _NULL_;
-		FILE Mailbox 
-	TO=('MSR_SYS_SUPPORT@LibertyMutual.com'
-'Kendrick.Perry@LibertyMutual.com'
-'carmen.louie@libertymutual.com'
-'shagun.agarwal@libertymutual.com'
-'mahalakshmi.kadirannagaripally@libertymutual.com'
-/*'kavisha.gupta@libertymutual.com'*/
-/*'amit.kumar13@libertymutual.com'*/
-'daniel.sepulveda@libertymutual.com')
-    ATTACH=("/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Local_Access/Fin/Reports/MRBookCloseValidation/Financial_Trending_Prem &filedate..csv"
-	CONTENT_TYPE="text/html")
-	SUBJECT="Management Reporting Financial Trending Premium Book Close Validation";
-	PUT "Please see the attached MR Financial Trending Premium Book Close Validations. PLEASE NOTE: This is an automated email. Please contact Kendrick Perry at Kendrick.Perry@LibertyMutual.com with any questions.";
-	RUN;
-	QUIT;
+# 4. Aggregate data by BKD_YR, BKD_MONTH, LOB, LOB_CTRL
+df_aggregated = df_filtered.groupby(['BKD_YR', 'BKD_MONTH', 'LOB', 'LOB_CTRL'], as_index=False).agg(
+    SUM_of_WRIT_PREM_AMT=('WRIT_PREM_AMT', 'sum'),
+    SUM_of_ERND_PREM_AMT=('ERND_PREM_AMT', 'sum')
+)
 
+# 5. Export the DataFrame to CSV
+output_file = f"/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Local_Access/Fin/Reports/MRBookCloseValidation/Financial_Trending_Prem_{filedate}.csv"
+df_aggregated.to_csv(output_file, index=False)
+
+# 6. Send Email with attachment
+def send_email_with_attachment(file_path):
+    # Set up the SMTP server (use the appropriate SMTP server for your organization)
+    smtp_server = "smtp.yourserver.com"  # e.g., smtp.gmail.com
+    smtp_port = 587  # or 465 for SSL
+    smtp_user = "your_email@libertymutual.com"
+    smtp_password = "your_password"
+
+    # Create email
+    from_email = "your_email@libertymutual.com"
+    to_emails = [
+        "MSR_SYS_SUPPORT@LibertyMutual.com",
+        "Kendrick.Perry@LibertyMutual.com",
+        "carmen.louie@libertymutual.com",
+        "shagun.agarwal@libertymutual.com",
+        "mahalakshmi.kadirannagaripally@libertymutual.com",
+        "daniel.sepulveda@libertymutual.com"
+    ]
+
+    subject = "Management Reporting Financial Trending Premium Book Close Validation"
+    body = "Please see the attached MR Financial Trending Premium Book Close Validations. PLEASE NOTE: This is an automated email. Please contact Kendrick Perry at Kendrick.Perry@LibertyMutual.com with any questions."
+
+    # Set up the MIME
+    msg = MIMEMultipart()
+    msg['From'] = from_email
+    msg['To'] = ', '.join(to_emails)
+    msg['Subject'] = subject
+
+    # Attach the body with the msg instance
+    msg.attach(MIMEText(body, 'plain'))
+
+    # Open the file to be sent
+    with open(file_path, "rb") as attachment:
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(attachment.read())
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f"attachment; filename={os.path.basename(file_path)}")
+        msg.attach(part)
+
+    # Send the message via SMTP server
+    try:
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()  # Secure the connection
+        server.login(smtp_user, smtp_password)
+        text = msg.as_string()
+        server.sendmail(from_email, to_emails, text)
+        print("Email sent successfully")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+    finally:
+        server.quit()
+
+# 7. Send the email with the CSV file attached
+send_email_with_attachment(output_file)
