@@ -1,83 +1,458 @@
-import pandas as pd
-from sqlalchemy import create_engine
+LibName REF '/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Fin_HO_Sec/Topline/Reference';
 
-# Create connection to your database
-engine = create_engine('sqlite:///financial_data.db')  # Example using SQLite; replace with your actual database
 
-# Load necessary tables into DataFrames
-pcp_df = pd.read_sql("SELECT * FROM SF_FNRPT_ODS_PCP_GL_FEED WHERE EFFYR = {currentYear} AND EFFMTH = {currentMonth}", engine)
-acct_df = pd.read_sql("SELECT * FROM REF_PCP_ACCOUNT_REF", engine)
-dist_df = pd.read_sql("SELECT * FROM REF_PCP_DISTRIB_REF", engine)
-lob_df = pd.read_sql("SELECT * FROM REF_PCP_LOB_REF", engine)
-stat_df = pd.read_sql("SELECT * FROM REF_PCP_State_REF", engine)
+Proc Sql;
+sysecho "Creating EP Allocation Stats";
 
-# Define transformation functions
-def line_func(row):
-    if row['MLOB'] == '0771' and row['PRODUCT'] == 'HO':
-        return 'Dwelling'
-    elif row['MLOB'] == '0771' and row['PRODUCT'] == '0CD':
-        return 'Condo'
-    elif row['MLOB'] == '0771' and row['PRODUCT'] == '0DW':
-        return 'Dwelling'
-    elif row['MLOB'] == '0771' and row['PRODUCT'] == '0TE':
-        return 'Renter'
-    elif row['MLOB'] == '0771' and row['PRODUCT'] not in ['HO', '0CD', '0DW', '0TE']:
-        return 'Dwelling'
-    elif row['MLOB'] == '0310' and row['PRODUCT'] == 'PU':
-        return 'Umbrella'
-    else:
-        return row['LOB_ALIAS']
+create table work.MR_EP_temp as
+select
+	Reinsurance,
+	State,
+	Distribution,
+	Line,
+	Vol_Invol,
+	sum("Earned Premium"n) as "Earned Premium"n
+from (
+select
+		input(CAT(t1.BKD_MONTH,"/01/",t1.BKD_YR), mmddyy10.) format=date9. as BookDate,
+		t1.BUS_TYPE as Reinsurance,
+		case
+			when t1.CVRG_ST_ABBR_CD in (' ', '', 'XX') then 'State NA' else t1.CVRG_ST_ABBR_CD end as State,
+		case
+			when t1.BRAND = 'S1' then 'Safeco'
+			else 'Liberty' end as Distribution,
+		case
+			when t1.LOB in ('Antique Auto','Auto','Classic Car Regular Use','Classic Car Restricted Use',
+								'Motor Home','Motorcycle','Trailer') then t2.GL_LOB
+			else t1.LOB end as Line,
+		t1.CVRG_TYP as Coverage,
+		case when t1.VOLNTRY_INVOL_CD in ('', ' ', '~') then "Voluntary" else t1.VOLNTRY_INVOL_CD end AS Vol_Invol,
+		sum(t1.ERND_PREM_AMT) as "Earned Premium"n
+	from SF_FNRPT.f_FINANCE_SUMMARY t1
+	left join REF.MR_LOB_REF t2 on (t1.LOB = t2.LOB AND t1.LOB_CTRL = t2.LOB_CTRL)
+	where t1.BKD_YR >= &alloc36moYear 
+		and t1.ERND_PREM_AMT not = 0 and t1.ERND_PREM_AMT not is missing
+		and t1.LOB NOT = 'LINE N/A' and t1.CVRG_ST_ABBR_CD not = 'PR'
+		and input(BKD_MONTH,best.) >=
+		(Case when BKD_YR=&alloc36moYear then input(&alloc36moMonth, best.) else 1 end)
+	group by 1,2,3,4,5,6,7
+	)
+where BookDate <= &bookClose
+group by 1,2,3,4,5
+order by 1,2,3,4,5;
+Quit;
 
-def dist_func(row):
-    if "Invol" in row['Code']:
-        return 'Involuntary'
-    else:
-        return 'Voluntary'
+PROC SQL;
 
-def distribution_func(row):
-    if row['Code'] == ' ':
-        return 'Distribution N/A'
-    elif row['Code'] == '0230':
-        return 'Certainly Auto'
-    else:
-        return row['USGL']
+sysecho "Creating PIF Allocation Stats";
 
-def brand_func(row):
-    if row['Code'] == ' ':
-        return 'Liberty'
-    else:
-        return row['Brand']
+create table work.MR_PIF_temp as
 
-# Apply transformations to DataFrame
-pcp_df['Line'] = pcp_df.apply(line_func, axis=1)
-pcp_df['Vol_Invol'] = pcp_df.apply(dist_func, axis=1)
-pcp_df['Distribution'] = pcp_df.apply(distribution_func, axis=1)
-pcp_df['Brand'] = pcp_df.apply(brand_func, axis=1)
+select
+	Reinsurance,
+	State,
+	Distribution,
+	Line,
+	Vol_Invol,
+	sum("PIF"n) as "PIF"n
+from (
 
-# Define columns for aggregation
-agg_columns = ['Other Revenue', 'Net Investment Income', 'Billing Fees', 'Non-Traditional Revenue', 
-               'Premium and Other Taxes', 'Charge-offs', 'Goodwill Amortization', 'Misc Income', 
-               'Change Loss IBNR Rsv CY CAT', 'Change Loss IBNR Rsv PY CAT', 'Change Loss IBNR Rsv CY NonCAT', 
-               'Change Loss IBNR Rsv PY NonCAT', 'Change ALAE IBNR Rsv CY CAT', 'Change ALAE IBNR Rsv PY CAT', 
-               'Change ALAE IBNR Rsv CY NonCAT', 'Change ALAE IBNR Rsv PY NonCAT', 'ULAE Paid Expenses', 
-               'Changes in ULAE Res', 'Amortization of DAC', 'Capitalization of DAC', 'Administrative Expense Paid', 
-               'Chg in Admin Expense Reserve', 'Commissions Paid', 'Chg Commissions Reserve', 'Other Acq. Exp. Paid', 
-               'Other Acq. Exp. Chg Reserve']
+	select
+		input(CAT(t1.BKD_MONTH,"/01/",t1.BKD_YR), mmddyy10.) format=date9. as BookDate,
+		t1.BUS_TYPE as Reinsurance,
+		case
+			when t1.CVRG_ST_ABBR_CD in (' ', '', 'XX') then 'State NA' else t1.CVRG_ST_ABBR_CD end as State,
+		case
+			when t1.BRAND = 'S1' then 'Safeco'
+			else 'Liberty' end as Distribution,
+		case
+			when t1.LOB in ('Antique Auto','Auto','Classic Car Regular Use','Classic Car Restricted Use',
+								'Motor Home','Motorcycle','Trailer') then t2.Line
+			else t1.LOB end as Line,
+		t1.CVRG_TYP as Coverage,
+		case when t1.VOLNTRY_INVOL_CD in ('', ' ', '~') then "Voluntary" else t1.VOLNTRY_INVOL_CD end AS Vol_Invol,
+		sum(t1.PIF_CNT) as "PIF"n
+	from SF_FNRPT.lf_FINANCE_SUMMARY_METRICS_v t1
+	left join REF.auto_translation t2 on (t1.LOB = t2.LOB)
+	where t1.BKD_YR >= &alloc36moYear and t1.PIF_CNT not = 0 and t1.PIF_CNT not is missing and t1.CVRG_ST_ABBR_CD not = 'PR'
+	and input(BKD_MONTH,best.) >=
+		(Case when BKD_YR=&alloc36moYear then input(&alloc36moMonth, best.) else 1 end)
+	group by 1,2,3,4,5,6,7
 
-# Aggregate data using groupby and sum
-agg_pcp_df = pcp_df.groupby(['BookDate', 'Reinsurance', 'State', 'Product', 'Line', 'GL_LOB', 'PRE_ALLOC_LOB', 
-                             'Vol_Invol', 'Distribution', 'Brand'], as_index=False)[agg_columns].sum()
+	)
+where BookDate <= &bookClose
+group by 1,2,3,4,5
+order by 1,2,3,4,5
 
-# Pivot the data to transform rows into columns
-pcp_transpose = agg_pcp_df.melt(id_vars=['BookDate', 'Reinsurance', 'State', 'Product', 'Line', 'GL_LOB', 
-                                         'PRE_ALLOC_LOB', 'Vol_Invol', 'Distribution', 'Brand'],
-                                value_vars=agg_columns, var_name='Account', value_name='Amount')
+;quit;
 
-# Filter out rows where Amount is zero
-pcp_final_df = pcp_transpose[pcp_transpose['Amount'] != 0]
+proc sql;
 
-# Save final data to SQL
-pcp_final_df.to_sql('pcp_final', engine, if_exists='replace', index=False)
+create table work.state_allocation_stats_EP as
 
-# Or save to CSV
-pcp_final_df.to_csv('pcp_final.csv', index=False)
+select 
+	gpd.State,
+	gpd.Distribution,
+	gpd.Line,
+	gpd.EP as Grouped,
+	ugpd.EP as Ungrouped,
+	gpd.EP / ugpd.EP as Alloc_Stat
+
+from (
+
+	select 
+		t1.State,
+		t1.Distribution,
+		t1.Line,
+		sum(t1."Earned Premium"n) format=20.5 as EP
+	from work.MR_EP_Temp t1
+	where t1."Earned Premium"n > 0
+	group by 1,2,3
+
+	) gpd
+
+full join (
+
+	select 
+		t2.Distribution,
+		t2.Line,
+		sum(t2."Earned Premium"n) format=20.5 as EP
+	from work.MR_EP_Temp t2
+	where t2."Earned Premium"n > 0
+	group by 1,2
+
+	) ugpd on (gpd.Distribution = ugpd.Distribution and gpd.Line = ugpd.Line)
+
+where (CALCULATED Alloc_Stat) > 0
+
+;quit;
+
+proc sql;
+
+create table work.state_allocation_stats_PIF as
+
+select 
+	gpd.State,
+	gpd.Distribution,
+	gpd.Line,
+	gpd.PIF as Grouped,
+	ugpd.PIF as Ungrouped,
+	gpd.PIF / ugpd.PIF as Alloc_Stat
+
+from (
+
+	select
+		t1.State,
+		t1.Distribution,
+		t1.Line,
+		sum(t1.PIF) format=20.5 as PIF
+	from work.MR_PIF_Temp t1
+	where t1.PIF > 0
+	group by 1,2,3
+
+	) gpd
+
+full join (
+
+	select 
+		t2.Distribution,
+		t2.Line,
+		sum(t2.PIF) format=20.5 as PIF
+	from work.MR_PIF_Temp t2
+	where t2.PIF > 0
+	group by 1,2
+
+	) ugpd on (gpd.Distribution = ugpd.Distribution and gpd.Line = ugpd.Line)
+
+where (CALCULATED Alloc_Stat) > 0
+
+;quit;
+
+
+proc sql;
+
+
+create table work.alloc_PIF_fix as
+
+select
+	"DIRECT" as Reinsurance,
+	t1.State,
+	t1.Distribution,
+	t1.Line,
+	"Voluntary" as Vol_Invol,
+	1 as PIF
+from (select t1.State, t1.Distribution, t1.Line
+		from work.state_allocation_stats_EP t1 left join work.state_allocation_stats_PIF t2
+		on t1.State = t2.State and t1.Distribution = t2.Distribution 
+		and t1.Line = t2.Line 
+		where t2.Alloc_Stat is missing
+	) t1
+
+outer union corr
+
+select *
+from work.MR_PIF_TEMP
+
+;quit;
+
+proc sql;
+
+create table work.state_allocation_stats_PIF_fix as
+
+select 
+	gpd.State,
+	gpd.Distribution,
+	gpd.Line,
+	gpd.PIF as Grouped,
+	ugpd.PIF as Ungrouped,
+	gpd.PIF / ugpd.PIF as Alloc_Stat
+
+from (
+
+	select 
+		t1.State,
+		t1.Distribution,
+		t1.Line,
+		sum(t1.PIF) format=20.5 as PIF
+	from work.alloc_PIF_fix t1
+	where t1.PIF > 0
+	group by 1,2,3
+
+	) gpd
+
+full join (
+
+	select 
+		t2.Distribution,
+		t2.Line,
+		sum(t2.PIF) format=20.5 as PIF
+	from work.alloc_PIF_fix t2
+	where t2.PIF > 0
+	group by 1,2
+
+	) ugpd on (gpd.Distribution = ugpd.Distribution and gpd.Line = ugpd.Line)
+
+where (CALCULATED Alloc_Stat) > 0
+
+;quit;
+
+
+proc sql;
+
+
+create table work.alloc_EP_fix as
+
+select
+	"DIRECT" as Reinsurance,
+	t1.State,
+	t1.Distribution,
+	t1.Line,
+	"Voluntary" as Vol_Invol,
+	1 as "Earned Premium"n
+from (select  t2.State, t2.Distribution, t2.Line
+		from work.state_allocation_stats_EP t1 right join work.state_allocation_stats_PIF t2 
+		on (t1.State = t2.State and t1.Distribution = t2.Distribution 
+		and t1.Line = t2.Line)
+		where t1.Alloc_Stat is missing
+	) t1
+
+outer union corr
+
+select *
+from work.MR_EP_TEMP
+
+;quit;
+
+proc sql;
+
+create table work.state_allocation_stats_EP_fix as
+
+select 
+	gpd.State,
+	gpd.Distribution,
+	gpd.Line,
+	gpd.EP as Grouped,
+	ugpd.EP as Ungrouped,
+	gpd.EP / ugpd.EP as Alloc_Stat
+
+from (
+
+	select 
+		t1.State,
+		t1.Distribution,
+		t1.Line,
+		sum(t1."Earned Premium"n) format=20.5 as EP
+	from work.alloc_EP_fix t1
+	where t1."Earned Premium"n > 0
+	group by 1,2,3
+
+	) gpd
+
+full join (
+
+	select 
+		t2.Distribution,
+		t2.Line,
+		sum(t2."Earned Premium"n) format=20.5 as EP
+	from work.alloc_EP_fix t2
+	where t2."Earned Premium"n > 0
+	group by 1,2
+
+	) ugpd on (gpd.Distribution = ugpd.Distribution and gpd.Line = ugpd.Line)
+
+where (CALCULATED Alloc_Stat) > 0
+
+;quit;
+
+proc sql;
+
+create table work.line_na_pif as
+
+select 
+	gpd.State,
+	gpd.Distribution,
+	"LOB N/A" as Line,
+	gpd.PIF as Grouped,
+	ugpd.PIF as Ungrouped,
+	gpd.PIF / ugpd.PIF as Alloc_Stat
+
+from (
+
+	select 
+		t1.State,
+		t1.Distribution,
+		sum(t1.PIF) format=20.5 as PIF
+	from work.alloc_PIF_fix t1
+	where t1.PIF > 0
+	group by 1,2
+
+	) gpd
+
+full join (
+
+	select 
+		t2.Distribution,
+		sum(t2.PIF) format=20.5 as PIF
+	from work.alloc_PIF_fix t2
+	where t2.PIF > 0
+	group by 1
+
+	) ugpd on (gpd.Distribution = ugpd.Distribution)
+
+where (CALCULATED Alloc_Stat) > 0
+
+;quit;
+
+proc sql;
+
+create table work.line_na_ep as
+
+select 
+	gpd.State,
+	gpd.Distribution,
+	"LOB N/A" as Line,
+	gpd.EP as Grouped,
+	ugpd.EP as Ungrouped,
+	gpd.EP / ugpd.EP as Alloc_Stat
+
+from (
+
+	select 
+		t1.State,
+		t1.Distribution,
+		sum(t1."Earned Premium"n) format=20.5 as EP
+	from work.alloc_EP_fix t1
+	where t1."Earned Premium"n > 0
+	group by 1,2
+
+	) gpd
+
+full join (
+
+	select 
+		t2.Distribution,
+		sum(t2."Earned Premium"n) format=20.5 as EP
+	from work.alloc_EP_fix t2
+	where t2."Earned Premium"n > 0
+	group by 1
+
+	) ugpd on (gpd.Distribution = ugpd.Distribution)
+
+where (CALCULATED Alloc_Stat) > 0
+
+;quit;
+
+proc sql;
+
+create table work.PIF_alloc_combined as
+
+select * from work.state_allocation_stats_PIF_fix
+
+outer union corr
+
+select * from work.line_na_pif
+
+outer union corr
+
+select State, "Safeco" as Distribution, Line, Grouped, Ungrouped, Alloc_Stat
+from work.state_allocation_stats_PIF_fix
+where Line = "A&H - Group" and Distribution = "Liberty"
+
+;quit;
+
+proc sql;
+
+create table work.EP_alloc_combined as
+
+select * from work.state_allocation_stats_EP_fix
+
+outer union corr
+
+select * from work.line_na_ep
+
+outer union corr
+
+select State, "Safeco" as Distribution, Line, Grouped, Ungrouped, Alloc_Stat
+from work.state_allocation_stats_EP_fix
+where Line = "A&H - Group" and Distribution = "Liberty"
+
+;quit;
+
+proc sql;
+
+create table work.alloc_stats_combined as
+
+select  *
+
+from (
+
+	select 
+		t1.State,
+		t1.Distribution,
+		t1.Line,
+		t1.Alloc_Stat as EP_alloc_stat,
+		t2.Alloc_Stat as PIF_alloc_stat,
+		case
+			when t2.Alloc_Stat is missing then t1.Alloc_Stat
+			else 0.5*(t1.Alloc_Stat + t2.Alloc_Stat) end as final_alloc
+	from work.EP_alloc_combined t1
+
+	left join (
+
+		select
+			State,
+			Distribution,
+			Line,
+			Grouped,
+			Ungrouped,
+			Alloc_Stat
+		from work.PIF_alloc_combined
+
+	) t2 on (t1.State = t2.State and t1.Distribution = t2.Distribution and t1.Line = t2.Line)
+
+)
+
+
+
+;quit;
+
