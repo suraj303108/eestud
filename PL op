@@ -1,70 +1,54 @@
+import pandas as pd
 
-proc sql;
+# Load your data (replace with actual data loading process, e.g., read from CSV, Excel, etc.)
+# Assuming the datasets are already loaded into pandas DataFrames: pcp_final_df, allocated_entries_new_df
+# Example:
+# pcp_final_df = pd.read_excel('/path_to_pcp_final.xlsx')
+# allocated_entries_new_df = pd.read_excel('/path_to_allocated_entries_new.xlsx')
 
-create table work.GL_state_alloc as
+# 1. Filter the first part of PCP_Final (Amount1 not 0 and not missing, Account condition)
+pcp_final_filtered_df = pcp_final_df[
+    (pcp_final_df['Amount1'] != 0) & 
+    (pcp_final_df['Amount1'].notna()) & 
+    ~pcp_final_df['Account'].isin([
+        'Administrative Expense Paid', 'Amortization of DAC', 'Capitalization of DAC',
+        'Changes in ULAE Res', 'Chg Commissions Reserve', 'Chg in Admin Expense Reserve', 
+        'Commissions Paid', 'Other Acq. Exp. Chg Reserve', 'Other Acq. Exp. Paid', 
+        'ULAE Paid Expenses', 'Billing Fees', 'Net Investment Income', 'Non-Traditional Revenue'
+    ])
+]
 
-select
-	BookDate,
-	Reinsurance,
-	State,
-	Product,
-	Line,
-	GL_LOB,
-	PRE_ALLOC_LOB,
-	Vol_Invol,
-	Distribution,
-	Account,
-	Amount1
-from work.PCP_Final
-where Amount1 not = 0 and Amount1 not is missing and 
-Account not in 
+# 2. Filter the second part of PCP_Final where Account is in the specified list and additional conditions
+pcp_final_allocated_accounts_df = pcp_final_df[
+    pcp_final_df['Account'].isin([
+        'Administrative Expense Paid', 'Amortization of DAC', 'Capitalization of DAC',
+        'Changes in ULAE Res', 'Chg Commissions Reserve', 'Chg in Admin Expense Reserve', 
+        'Commissions Paid', 'Other Acq. Exp. Chg Reserve', 'Other Acq. Exp. Paid', 
+        'ULAE Paid Expenses', 'Billing Fees', 'Net Investment Income', 'Non-Traditional Revenue'
+    ]) & 
+    (pcp_final_df['State'].notna()) & 
+    (pcp_final_df['State'] != 'State N/A') & 
+    ~pcp_final_df['Reinsurance'].isin(['G1', 'G2', 'G3', 'G4'])
+]
 
-('Administrative Expense Paid','Amortization of DAC','Capitalization of DAC',
-           'Changes in ULAE Res','Chg Commissions Reserve','Chg in Admin Expense Reserve','Commissions Paid',
-           'Other Acq. Exp. Chg Reserve','Other Acq. Exp. Paid','ULAE Paid Expenses','Billing Fees','Net Investment Income','Non-Traditional Revenue')
+# 3. Filter the third part of PCP_Final where Reinsurance is in ('G1', 'G2', 'G3', 'G4')
+pcp_final_reinsurance_df = pcp_final_df[pcp_final_df['Reinsurance'].isin(['G1', 'G2', 'G3', 'G4'])]
 
+# 4. Combine the datasets using pandas.concat (Outer Union)
+combined_df = pd.concat([
+    pcp_final_filtered_df[['BookDate', 'Reinsurance', 'State', 'Product', 'Line', 'GL_LOB', 
+                           'PRE_ALLOC_LOB', 'Vol_Invol', 'Distribution', 'Account', 'Amount1']], 
+    pcp_final_allocated_accounts_df[['BookDate', 'Reinsurance', 'State', 'Product', 'Line', 'GL_LOB', 
+                                     'PRE_ALLOC_LOB', 'Vol_Invol', 'Distribution', 'Account', 'Amount1']], 
+    allocated_entries_new_df[['BookDate', 'Reinsurance', 'State1', 'Product', 'Line', 'GL_LOB', 
+                             'PRE_ALLOC_LOB', 'Vol_Invol', 'Distribution', 'Account', 'Alloc_Amount']].rename(
+        columns={'State1': 'State', 'Alloc_Amount': 'Amount1'})
+], ignore_index=True)
 
-			OR ( 
+# 5. Clean up and ensure correct column names
+combined_df = combined_df[['BookDate', 'Reinsurance', 'State', 'Product', 'Line', 'GL_LOB', 
+                           'PRE_ALLOC_LOB', 'Vol_Invol', 'Distribution', 'Account', 'Amount1']]
 
-Account in ('Administrative Expense Paid','Amortization of DAC','Capitalization of DAC',
-           'Changes in ULAE Res','Chg Commissions Reserve','Chg in Admin Expense Reserve','Commissions Paid',
-           'Other Acq. Exp. Chg Reserve','Other Acq. Exp. Paid','ULAE Paid Expenses','Billing Fees','Net Investment Income','Non-Traditional Revenue') 
-AND State NOT in('State N/A','',' ') AND Reinsurance NOT in ('G1','G2','G3','G4') 
-
-
-)
-
-outer union corr
-
-select 
-	BookDate,
-	Reinsurance,
-	State1 as State,
-	Product,
-	Line,
-	GL_LOB,
-	PRE_ALLOC_LOB,
-	Vol_Invol,
-	Distribution,
-	Account,
-	Alloc_Amount as Amount1
-from work.allocated_entries_new
-
-outer union corr
-
-select
-	BookDate,
-	Reinsurance,
-	State,
-	Product,
-	Line,
-	GL_LOB,
-	PRE_ALLOC_LOB,
-	Vol_Invol,
-	Distribution,
-	Account,
-	Amount1
-from work.PCP_Final
-where Reinsurance in ('G1','G2','G3','G4')
-
-;quit;
+# 6. The final combined DataFrame (equivalent to the SAS table WORK.GL_state_alloc)
+# You can now save this DataFrame to a CSV file or perform further analysis
+combined_df.to_csv(f'GL_state_alloc_{filedate}.csv', index=False)
