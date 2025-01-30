@@ -1,39 +1,42 @@
-/*proc import datafile  =  '/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Local_Access/Fin/Reports/DataStrategy/Topline/AllocationStats - Backup.xlsx'
- out  =  Alloc_Stats
- dbms  =  xlsx
- replace
-;run;*/
+import pandas as pd
 
-PROC SQL;
-   CREATE TABLE WORK.Entries_to_alloc AS 
-   SELECT *
-      FROM WORK.PCP_FINAL t1
-      WHERE t1.Account in ('Administrative Expense Paid','Amortization of DAC','Capitalization of DAC',
-           'Changes in ULAE Res','Chg Commissions Reserve','Chg in Admin Expense Reserve','Commissions Paid',
-           'Other Acq. Exp. Chg Reserve','Other Acq. Exp. Paid','ULAE Paid Expenses','Billing Fees','Net Investment Income','Non-Traditional Revenue')
-			AND ( t1.State IS MISSING OR t1.State = 'State N/A' ) and t1.Reinsurance not in ('G1','G2','G3','G4');
-QUIT;
+# Load your data (replace with actual data loading process, e.g., read from CSV, Excel, etc.)
+# Assuming the datasets are already loaded into pandas DataFrames: pcp_final_df, gl_to_mr_line_df, alloc_stats_combined_df
+# Example:
+# pcp_final_df = pd.read_excel('/path_to_pcp_final.xlsx')
+# gl_to_mr_line_df = pd.read_excel('/path_to_gl_to_mr_line.xlsx')
+# alloc_stats_combined_df = pd.read_excel('/path_to_alloc_stats_combined.xlsx')
 
-PROC SQL;
-   CREATE TABLE WORK.Allocated_Entries_NEW AS 
-   SELECT t1.BookDate, 
-          t1.Reinsurance, 
-          t1.State, 
-          t1.Product, 
-          t1.Line, 
-          t1.GL_LOB, 
-          t1.PRE_ALLOC_LOB, 
-          t1.Vol_Invol, 
-          t1.Distribution,
-		  t1.Brand, 
-          t1.Account, 
-          t1.Amount1, 
-          t2.State AS State1, 
-          t2.Line AS Line1,
-		  t2.Distribution as AllocBrand,
-          t2.final_alloc, 
-          t1.Amount1 * t2.final_alloc AS Alloc_Amount
-      FROM WORK.ENTRIES_TO_ALLOC t1
-	  		left join REF.gl_to_mr_line t3 on t1.Line = t3.Line
-           LEFT JOIN work.alloc_stats_combined t2 ON (t1.Brand = t2.Distribution and t2.Line = t3.MR_LOB);
-QUIT;
+# 1. Filter the `PCP_FINAL` DataFrame to match the conditions
+entries_to_alloc_df = pcp_final_df[
+    pcp_final_df['Account'].isin([
+        'Administrative Expense Paid', 'Amortization of DAC', 'Capitalization of DAC',
+        'Changes in ULAE Res', 'Chg Commissions Reserve', 'Chg in Admin Expense Reserve', 
+        'Commissions Paid', 'Other Acq. Exp. Chg Reserve', 'Other Acq. Exp. Paid', 
+        'ULAE Paid Expenses', 'Billing Fees', 'Net Investment Income', 'Non-Traditional Revenue'
+    ]) & 
+    (pcp_final_df['State'].isna() | (pcp_final_df['State'] == 'State N/A')) & 
+    ~pcp_final_df['Reinsurance'].isin(['G1', 'G2', 'G3', 'G4'])
+]
+
+# 2. Merge `entries_to_alloc_df` with `gl_to_mr_line_df` and `alloc_stats_combined_df`
+# First, merge `entries_to_alloc_df` with `gl_to_mr_line_df` on the `Line` column
+merged_df = pd.merge(entries_to_alloc_df, gl_to_mr_line_df[['Line', 'MR_LOB']], 
+                     how='left', on='Line', suffixes=('', '_MR_LOB'))
+
+# Then, merge the result with `alloc_stats_combined_df` on `Brand` and `Line` columns
+final_df = pd.merge(merged_df, alloc_stats_combined_df[['Distribution', 'Line', 'final_alloc']], 
+                     how='left', left_on=['Brand', 'MR_LOB'], right_on=['Distribution', 'Line'])
+
+# 3. Calculate the new column `Alloc_Amount`
+final_df['Alloc_Amount'] = final_df['Amount1'] * final_df['final_alloc']
+
+# 4. Select relevant columns for the final output
+final_allocated_entries_df = final_df[['BookDate', 'Reinsurance', 'State', 'Product', 'Line', 'GL_LOB', 
+                                       'PRE_ALLOC_LOB', 'Vol_Invol', 'Distribution', 'Brand', 'Account', 
+                                       'Amount1', 'State1', 'Line1', 'AllocBrand', 'final_alloc', 'Alloc_Amount']]
+
+# Now, final_allocated_entries_df is equivalent to WORK.Allocated_Entries_NEW
+
+# To export the final result to CSV (as in the SAS code), you can use:
+final_allocated_entries_df.to_csv(f'Allocated_Entries_NEW_{filedate}.csv', index=False)
