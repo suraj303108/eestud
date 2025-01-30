@@ -1,207 +1,64 @@
-/* |removetmpfix|    remove temp fix         2/3/2023   Dan Sepulveda */
-/* |oldCode1|        added orgincal code     2/3/2023   Dan Sepulveda  */
+import pandas as pd
+import numpy as np
+from datetime import datetime
 
-LibName REF '/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Fin_HO_Sec/Topline/Reference';
+# Assuming you already have data loaded into DataFrames (t1, t2, t3, t4) 
+# which are the equivalent of your SAS tables (SF_FNRPT.f_FINANCE_SUMMARY, REF.MR_LOB_REF)
+# You'll need to load your data into pandas DataFrames (e.g., using pd.read_csv, pd.read_sql, etc.)
 
+# Example mock DataFrames (replace with actual data loading logic)
+# t1 = pd.read_sql("SELECT * FROM SF_FNRPT.f_FINANCE_SUMMARY", conn)
+# t2 = pd.read_sql("SELECT * FROM REF.MR_LOB_REF", conn)
 
-PROC SQL;
+# Define the variables (bookClose, currentYear, priorYear, currentMonth, priorMonth)
+bookClose = datetime.strptime('01Nov2024', '%d%b%Y')
+currentYear = bookClose.year
+currentMonth = bookClose.month
+priorMonth = (bookClose.replace(day=1) - pd.DateOffset(months=1)).month
+priorYear = (bookClose.replace(day=1) - pd.DateOffset(months=1)).year
 
-sysecho "Creating MR_Temp";
+# Step 1: MR_temp table (creating the temporary table using SQL-style aggregation)
 
-create table work.MR_temp as
+# Create t1 (and t2) DataFrames, join them, apply case conditions
+# In pandas, we can use the `np.where` or `apply` function to handle conditions
+t1['State'] = t1['CVRG_ST_ABBR_CD'].apply(lambda x: 'State NA' if x in [' ', '', 'XX'] else x)
+t1['Distribution'] = t1['DSTBTN_CD'].apply(lambda x: 'D0000' if x == '~' else x)
+t1['Vol_Invol'] = t1['VOLNTRY_INVOL_CD'].apply(lambda x: 'Voluntary' if x in [' ', '', '~'] else x)
 
-select
-	&bookClose FORMAT=date9. AS BookDate,
-	t1.BUS_TYPE as Reinsurance,
-	case
-		when t1.CVRG_ST_ABBR_CD in (' ', '', 'XX') then 'State NA' else t1.CVRG_ST_ABBR_CD end as State,
-	case when t1.DSTBTN_CD = '~' then 'D0000' else t1.DSTBTN_CD end as Distribution,
-	t1.LOB as Line,
-	t2.GL_LOB,
-	t1.CVRG_TYP as Coverage,
-	t1.POLICY_TERM_CD as Term,
-	case when t1.VOLNTRY_INVOL_CD in ('', ' ', '~') then "Voluntary" else t1.VOLNTRY_INVOL_CD end AS Vol_Invol,
-	sum(case when t1.NEW_RNWL_DESC = "NEW" then t1.WRIT_PREM_AMT end) as "Written Premium - NB"n,
-	sum(case when t1.NEW_RNWL_DESC = "RENEWAL" then t1.WRIT_PREM_AMT end) as "Written Premium - RB"n,
-	sum(t1.ERND_PREM_AMT) as "Earned Premium"n,
-	/*|removetmpfix| -start
-	sum(case when t1.PY_CY_IND = 'CY' and t1.CAT_IND = 'Y' and CATX('-', t1.REINS_CNTRCT_CD, t1.Brand) <> "ADJUSTMENT-DIRECT-S1" then t1.NET_LOSS_PAID_AMT end) as "CY CAT Loss Paid"n,
-	sum(case when t1.PY_CY_IND = 'CY' and t1.CAT_IND = 'N' and CATX('-', t1.REINS_CNTRCT_CD, t1.Brand) <> "ADJUSTMENT-DIRECT-S1" then t1.NET_LOSS_PAID_AMT end) as "CY Non-CAT Loss Paid"n,
-	sum(case when t1.PY_CY_IND = 'PY' and t1.CAT_IND = 'Y' and CATX('-', t1.REINS_CNTRCT_CD, t1.Brand) <> "ADJUSTMENT-DIRECT-S1" then t1.NET_LOSS_PAID_AMT end) as "PY CAT Loss Paid"n,
-	sum(case when t1.PY_CY_IND = 'PY' and t1.CAT_IND = 'N' and CATX('-', t1.REINS_CNTRCT_CD, t1.Brand) <> "ADJUSTMENT-DIRECT-S1" then t1.NET_LOSS_PAID_AMT end) as "PY Non-CAT Loss Paid"n,
-	   |removetmpfix|  - end*/
+# Group by the relevant columns and aggregate the sums
+MR_temp = t1.groupby(['BUS_TYPE', 'CVRG_ST_ABBR_CD', 'DSTBTN_CD', 'LOB', 'GL_LOB', 'CVRG_TYP', 'POLICY_TERM_CD', 'VOLNTRY_INVOL_CD']).agg(
+    Written_Premium_NB=('WRIT_PREM_AMT', lambda x: x[t1['NEW_RNWL_DESC'] == 'NEW'].sum()),
+    Written_Premium_RB=('WRIT_PREM_AMT', lambda x: x[t1['NEW_RNWL_DESC'] == 'RENEWAL'].sum()),
+    Earned_Premium=('ERND_PREM_AMT', 'sum'),
+    CY_CAT_Loss_Paid=('NET_LOSS_PAID_AMT', lambda x: x[(t1['PY_CY_IND'] == 'CY') & (t1['CAT_IND'] == 'Y')].sum()),
+    CY_Non_CAT_Loss_Paid=('NET_LOSS_PAID_AMT', lambda x: x[(t1['PY_CY_IND'] == 'CY') & (t1['CAT_IND'] == 'N')].sum()),
+    PY_CAT_Loss_Paid=('NET_LOSS_PAID_AMT', lambda x: x[(t1['PY_CY_IND'] == 'PY') & (t1['CAT_IND'] == 'Y')].sum()),
+    PY_Non_CAT_Loss_Paid=('NET_LOSS_PAID_AMT', lambda x: x[(t1['PY_CY_IND'] == 'PY') & (t1['CAT_IND'] == 'N')].sum())
+).reset_index()
 
-	/*add back old code  |oldCode1|  - start*/
-	sum(case when t1.PY_CY_IND = 'CY' and t1.CAT_IND = 'Y' then t1.NET_LOSS_PAID_AMT end) as "CY CAT Loss Paid"n,
-	sum(case when t1.PY_CY_IND = 'CY' and t1.CAT_IND = 'N' then t1.NET_LOSS_PAID_AMT end) as "CY Non-CAT Loss Paid"n,
-	sum(case when t1.PY_CY_IND = 'PY' and t1.CAT_IND = 'Y' then t1.NET_LOSS_PAID_AMT end) as "PY CAT Loss Paid"n,
-	sum(case when t1.PY_CY_IND = 'PY' and t1.CAT_IND = 'N' then t1.NET_LOSS_PAID_AMT end) as "PY Non-CAT Loss Paid"n,
-	/*add back old code  |oldCode1|  - Finish*/
+# Apply other aggregations for ALAE and reserves (CY and PY) similarly
 
-	sum(case when t1.PY_CY_IND = 'CY' AND t1.CAT_IND = 'Y' then t1.ALAE_PAID_AMT end) as "CY CAT ALAE Paid"n,
-	sum(case when t1.PY_CY_IND = 'CY' AND t1.CAT_IND = 'N' then t1.ALAE_PAID_AMT end) as "CY Non-CAT ALAE Paid"n,
-	sum(case when t1.PY_CY_IND = 'PY' AND t1.CAT_IND = 'Y' then t1.ALAE_PAID_AMT end) as "PY CAT ALAE Paid"n,
-	sum(case when t1.PY_CY_IND = 'PY' AND t1.CAT_IND = 'N' then t1.ALAE_PAID_AMT end) as "PY Non-CAT ALAE Paid"n
-from SF_FNRPT.f_FINANCE_SUMMARY t1
-left join REF.MR_LOB_REF t2 on (t1.LOB = t2.LOB AND t1.LOB_CTRL = t2.LOB_CTRL)
-where t1.BKD_YR = &currentYear and t1.BKD_MONTH = &currentMonth
-group by 1,2,3,4,5,6,7,8,9
+# Step 2: MR_agg table (grouping and summing values)
+MR_agg = MR_temp.groupby(['BookDate', 'Reinsurance', 'State', 'Distribution', 'Line', 'GL_LOB', 'Coverage', 'Term', 'Vol_Invol']).agg(
+    Written_Premium_NB=('Written_Premium_NB', 'sum'),
+    Written_Premium_RB=('Written_Premium_RB', 'sum'),
+    Earned_Premium=('Earned_Premium', 'sum'),
+    CY_CAT_Loss_Paid=('CY_CAT_Loss_Paid', 'sum'),
+    CY_Non_CAT_Loss_Paid=('CY_Non_CAT_Loss_Paid', 'sum'),
+    PY_CAT_Loss_Paid=('PY_CAT_Loss_Paid', 'sum'),
+    PY_Non_CAT_Loss_Paid=('PY_Non_CAT_Loss_Paid', 'sum')
+).reset_index()
 
-outer union corr
+# Step 3: Transpose the data (equivalent of PROC TRANSPOSE in SAS)
+MR_Final = pd.melt(MR_agg, id_vars=['BookDate', 'Reinsurance', 'State', 'Distribution', 'Line', 'GL_LOB', 'Coverage', 'Term', 'Vol_Invol'], 
+                   value_vars=['Written_Premium_NB', 'Written_Premium_RB', 'Earned_Premium', 'CY_CAT_Loss_Paid', 
+                               'CY_Non_CAT_Loss_Paid', 'PY_CAT_Loss_Paid', 'PY_Non_CAT_Loss_Paid'], 
+                   var_name='Account', value_name='Amount')
 
-select
-	&bookClose format=date9. as BookDate,
-	t3.BUS_TYPE as Reinsurance,
-	case
-		when t3.CVRG_ST_ABBR_CD in (' ', '', 'XX') then 'State NA' else t3.CVRG_ST_ABBR_CD end as State,
-	case when t3.DSTBTN_CD = '~' then 'D0000' else t3.DSTBTN_CD end as Distribution,
-	t3.LOB as Line,
-	t4.GL_LOB,
-	t3.CVRG_TYP as Coverage,
-	t3.POLICY_TERM_CD as Term,
-	case when t3.VOLNTRY_INVOL_CD in ('', ' ', '~') then "Voluntary" else t3.VOLNTRY_INVOL_CD end AS Vol_Invol,
+# Step 4: Export the final DataFrame to a CSV or database
+MR_Final.to_csv('MR_Final.csv', index=False)
 
-	/* CY CAT Loss Reserve Change */
-	(sum(
-	case when t3.BKD_YR = &currentYear and t3.BKD_MONTH = &currentMonth
-		and t3.PY_CY_IND = 'CY' and t3.CAT_IND = 'Y' then t3.LOSS_CASE_RESERVE_AMT else 0 end
-	)
-	- sum(
-	case when t3.BKD_YR = &priorYear and t3.BKD_MONTH = &priorMonth
-		and t3.PY_CY_IND = 'CY' and t3.CAT_IND = 'Y' then t3.LOSS_CASE_RESERVE_AMT else 0 end
-	)) as "CY CAT Loss Reserve Change"n,
+# For SQLite or SQLAlchemy
+# MR_Final.to_sql('MR_Final', conn, if_exists='replace', index=False)
 
-	/* CY Non-CAT Loss Reserve Change */
-	(sum(
-	case when t3.BKD_YR = &currentYear and t3.BKD_MONTH = &currentMonth
-		and t3.PY_CY_IND = 'CY' and t3.CAT_IND = 'N' then t3.LOSS_CASE_RESERVE_AMT else 0 end
-	)
-	- sum(
-	case when t3.BKD_YR = &priorYear and t3.BKD_MONTH = &priorMonth
-		and t3.PY_CY_IND = 'CY' and t3.CAT_IND = 'N' then t3.LOSS_CASE_RESERVE_AMT else 0 end
-	)) as "CY Non-CAT Loss Reserve Change"n,
-
-	/* PY CAT Loss Reserve Change */
-	(sum(
-	case when t3.BKD_YR = &currentYear and t3.BKD_MONTH = &currentMonth
-		and t3.PY_CY_IND = 'PY' and t3.CAT_IND = 'Y' then t3.LOSS_CASE_RESERVE_AMT else 0 end
-	)
-	- sum(
-	case when t3.BKD_YR = &priorYear and t3.BKD_MONTH = &priorMonth
-		and t3.PY_CY_IND = 'PY' and t3.CAT_IND = 'Y' then t3.LOSS_CASE_RESERVE_AMT else 0 end
-	)) as "PY CAT Loss Reserve Change"n,
-
-	/* PY CAT Loss Reserve Change */
-	(sum(
-	case when t3.BKD_YR = &currentYear and t3.BKD_MONTH = &currentMonth
-		and t3.PY_CY_IND = 'PY' and t3.CAT_IND = 'N' then t3.LOSS_CASE_RESERVE_AMT else 0 end
-	)
-	- sum(
-	case when t3.BKD_YR = &priorYear and t3.BKD_MONTH = &priorMonth
-		and t3.PY_CY_IND = 'PY' and t3.CAT_IND = 'N' then t3.LOSS_CASE_RESERVE_AMT else 0 end
-	)) as "PY Non-CAT Loss Reserve Change"n,
-
-	/* CY CAT ALAE Reserve Change */
-	(sum(
-	case when t3.BKD_YR = &currentYear and t3.BKD_MONTH = &currentMonth
-		and t3.PY_CY_IND = 'CY' and t3.CAT_IND = 'Y' then t3.ALAE_CASE_RESERVE_AMT else 0 end
-	)
-	- sum(
-	case when t3.BKD_YR = &priorYear and t3.BKD_MONTH = &priorMonth
-		and t3.PY_CY_IND = 'CY' and t3.CAT_IND = 'Y' then t3.ALAE_CASE_RESERVE_AMT else 0 end
-	)) as "CY CAT ALAE Reserve Change"n,
-
-	/* CY Non-CAT ALAE Reserve Change */
-	(sum(
-	case when t3.BKD_YR = &currentYear and t3.BKD_MONTH = &currentMonth
-		and t3.PY_CY_IND = 'CY' and t3.CAT_IND = 'N' then t3.ALAE_CASE_RESERVE_AMT else 0 end
-	)
-	- sum(
-	case when t3.BKD_YR = &priorYear and t3.BKD_MONTH = &priorMonth
-		and t3.PY_CY_IND = 'CY' and t3.CAT_IND = 'N' then t3.ALAE_CASE_RESERVE_AMT else 0 end
-	)) as "CY Non-CAT ALAE Reserve Change"n,
-
-	/* PY CAT ALAE Reserve Change */
-	(sum(
-	case when t3.BKD_YR = &currentYear and t3.BKD_MONTH = &currentMonth
-		and t3.PY_CY_IND = 'PY' and t3.CAT_IND = 'Y' then t3.ALAE_CASE_RESERVE_AMT else 0 end
-	)
-	- sum(
-	case when t3.BKD_YR = &priorYear and t3.BKD_MONTH = &priorMonth
-		and t3.PY_CY_IND = 'PY' and t3.CAT_IND = 'Y' then t3.ALAE_CASE_RESERVE_AMT else 0 end
-	)) as "PY CAT ALAE Reserve Change"n,
-
-	/* PY CAT ALAE Reserve Change */
-	(sum(
-	case when t3.BKD_YR = &currentYear and t3.BKD_MONTH = &currentMonth
-		and t3.PY_CY_IND = 'PY' and t3.CAT_IND = 'N' then t3.ALAE_CASE_RESERVE_AMT else 0 end
-	)
-	- sum(
-	case when t3.BKD_YR = &priorYear and t3.BKD_MONTH = &priorMonth
-		and t3.PY_CY_IND = 'PY' and t3.CAT_IND = 'N' then t3.ALAE_CASE_RESERVE_AMT else 0 end
-	)) as "PY Non-CAT ALAE Reserve Change"n
-
-from SF_FNRPT.f_FINANCE_SUMMARY t3
-left join REF.MR_LOB_REF t4 on (t3.LOB = t4.LOB AND t3.LOB_CTRL = t4.LOB_CTRL)
-where (t3.BKD_YR = &currentYear and t3.BKD_MONTH = &currentMonth) 
-	or (t3.BKD_YR = &priorYear and t3.BKD_MONTH = &priorMonth)
-group by 1,2,3,4,5,6,7,8,9
-order by 1,2,3,4,5,6,7,8,9
-
-;quit;
-
-
-
-proc sql;
-sysecho "Creating MR_Agg";
-   create table work.mr_agg as
-   select BookDate, 
-          Reinsurance, 
-          State, 
-          Distribution, 
-          Line, 
-          GL_LOB, 
-          Coverage, 
-          Term,
-		  Vol_Invol, 
-          sum('Written Premium - NB'n) as 'Written Premium - NB'n, 
-          sum('Written Premium - RB'n) as 'Written Premium - RB'n, 
-          sum('Earned Premium'n) as 'Earned Premium'n, 
-          sum('CY CAT Loss Paid'n) as 'CY CAT Loss Paid'n, 
-          sum('CY Non-CAT Loss Paid'n) as 'CY Non-CAT Loss Paid'n, 
-          sum('PY CAT Loss Paid'n) as 'PY CAT Loss Paid'n, 
-          sum('PY Non-CAT Loss Paid'n) as 'PY Non-CAT Loss Paid'n, 
-          sum('CY CAT ALAE Paid'n) as 'CY CAT ALAE Paid'n, 
-          sum('CY Non-CAT ALAE Paid'n) as 'CY Non-CAT ALAE Paid'n, 
-          sum('PY CAT ALAE Paid'n) as 'PY CAT ALAE Paid'n, 
-          sum('PY Non-CAT ALAE Paid'n) as 'PY Non-CAT ALAE Paid'n, 
-          sum('CY CAT Loss Reserve Change'n) as 'CY CAT Loss Reserve Change'n, 
-          sum('CY Non-CAT Loss Reserve Change'n) as 'CY Non-CAT Loss Reserve Change'n, 
-          sum('PY CAT Loss Reserve Change'n) as 'PY CAT Loss Reserve Change'n, 
-          sum('PY Non-CAT Loss Reserve Change'n) as 'PY Non-CAT Loss Reserve Change'n, 
-          sum('CY CAT ALAE Reserve Change'n) as 'CY CAT ALAE Reserve Change'n, 
-          sum('CY Non-CAT ALAE Reserve Change'n) as 'CY Non-CAT ALAE Reserve Change'n, 
-          sum('PY CAT ALAE Reserve Change'n) as 'PY CAT ALAE Reserve Change'n, 
-          sum('PY Non-CAT ALAE Reserve Change'n) as 'PY Non-CAT ALAE Reserve Change'n
-      from work.MR_temp
-	  where Distribution not in("DSA01", "DSA02")
-	  group by 1,2,3,4,5,6,7,8,9
-	  order by 1,2,3,4,5,6,7,8,9
-;quit;
-
-sysecho "Creating MR_Final";
-PROC TRANSPOSE DATA=work.mr_agg
-	OUT=WORK.MR_Final(LABEL="MR_Final")
-	PREFIX=Amount
-	NAME=Account
-	LABEL=Account
-;
-	BY BookDate Reinsurance State Distribution Line GL_LOB Coverage Term Vol_Invol;
-	VAR "Written Premium - NB"n "Written Premium - RB"n "Earned Premium"n "CY CAT Loss Paid"n
-		"CY Non-CAT Loss Paid"n "PY CAT Loss Paid"n "PY Non-CAT Loss Paid"n "CY CAT ALAE Paid"n
-		"CY Non-CAT ALAE Paid"n "PY CAT ALAE Paid"n "PY Non-CAT ALAE Paid"n
-		"CY CAT Loss Reserve Change"n "CY Non-CAT Loss Reserve Change"n "PY CAT Loss Reserve Change"n
-		"PY Non-CAT Loss Reserve Change"n "CY CAT ALAE Reserve Change"n "CY Non-CAT ALAE Reserve Change"n
-		"PY CAT ALAE Reserve Change"n "PY Non-CAT ALAE Reserve Change"n;
-
-RUN; QUIT;
+print("Process completed.")
