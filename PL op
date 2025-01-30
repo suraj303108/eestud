@@ -1,21 +1,36 @@
-%let bookClose = '01Nov2024'd;
-%let currentMonth = put(month(&bookClose), z2.);
-%let priorMonth = put(month(intnx('month',&bookClose,-1,'b')), z2.);
-%let currentYear = put(year(&bookClose), 4.);
-%let priorYear = put(year(intnx('month',&bookClose,-1,'b')), 4.);
-%let alloc36moMonth = put(month(intnx('month',&bookClose,-35,'b')), z2.);
-%let alloc36moYear = put(year(intnx('month',&bookClose,-35,'b')), 4.);
-%let alloc36moDate = input(CAT(&alloc36moMonth,"/01/",&alloc36moYear), mmddyy10.);
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
-data "Variable Check"n;
-	bookClose = &bookClose;
-	currentMonth = &currentMonth;
-	currentYear = &currentYear;
-	priorMonth = &priorMonth;
-	priorYear = &priorYear;
-	alloc36moMonth =  &alloc36moMonth;
-	alloc36moYear = &alloc36moYear;
-	alloc36moDate = &alloc36moDate;
-	format bookClose date9.;
-	format alloc36moDate date9.;
-run;
+# Set the bookClose date
+bookClose = datetime.strptime('01Nov2024', '%d%b%Y')
+
+# Current month and year
+currentMonth = bookClose.month
+currentYear = bookClose.year
+
+# Prior month and year
+priorMonth = (bookClose - relativedelta(months=1)).month
+priorYear = (bookClose - relativedelta(months=1)).year
+
+# 36-month allocation month and year
+alloc36moMonth = (bookClose - relativedelta(months=35)).month
+alloc36moYear = (bookClose - relativedelta(months=35)).year
+
+# 36-month allocation date (assuming the 1st of the month)
+alloc36moDate = datetime(alloc36moYear, alloc36moMonth, 1)
+
+# Output the values in a structured format
+data = {
+    'bookClose': bookClose.strftime('%d%b%Y'),
+    'currentMonth': f'{currentMonth:02}',
+    'currentYear': f'{currentYear}',
+    'priorMonth': f'{priorMonth:02}',
+    'priorYear': f'{priorYear}',
+    'alloc36moMonth': f'{alloc36moMonth:02}',
+    'alloc36moYear': f'{alloc36moYear}',
+    'alloc36moDate': alloc36moDate.strftime('%d%b%Y')
+}
+
+# Print the results
+for key, value in data.items():
+    print(f'{key}: {value}')
