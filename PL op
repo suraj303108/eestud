@@ -1,10 +1,21 @@
-1. What is the difference between deepcopy and shallow copy in Python?
-Answer:
+%let bookClose = '01Nov2024'd;
+%let currentMonth = put(month(&bookClose), z2.);
+%let priorMonth = put(month(intnx('month',&bookClose,-1,'b')), z2.);
+%let currentYear = put(year(&bookClose), 4.);
+%let priorYear = put(year(intnx('month',&bookClose,-1,'b')), 4.);
+%let alloc36moMonth = put(month(intnx('month',&bookClose,-35,'b')), z2.);
+%let alloc36moYear = put(year(intnx('month',&bookClose,-35,'b')), 4.);
+%let alloc36moDate = input(CAT(&alloc36moMonth,"/01/",&alloc36moYear), mmddyy10.);
 
-Shallow copy: A shallow copy creates a new object, but it doesn't create copies of nested objects. Instead, it just references the original objects inside the copied object. For example, if the original list has a nested list, both the original and copied lists will refer to the same nested list.
-Example: list1 = [1, [2, 3]], list2 = list1.copy()
-Any change to the nested list in list2 will also affect list1.
-Deep copy: A deep copy creates a new object and recursively copies all objects found in the original. This means that changes to any nested objects in the copied object will not affect the original.
-Example: import copy
-list1 = [1, [2, 3]], list2 = copy.deepcopy(list1)
-Modifications in list2's nested list won't affect list1.
+data "Variable Check"n;
+	bookClose = &bookClose;
+	currentMonth = &currentMonth;
+	currentYear = &currentYear;
+	priorMonth = &priorMonth;
+	priorYear = &priorYear;
+	alloc36moMonth =  &alloc36moMonth;
+	alloc36moYear = &alloc36moYear;
+	alloc36moDate = &alloc36moDate;
+	format bookClose date9.;
+	format alloc36moDate date9.;
+run;
