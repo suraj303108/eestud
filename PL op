@@ -1,96 +1,54 @@
-import pandas as pd
 
-# Assuming data is already loaded into DataFrames (Replace with your actual loading method)
-# mr_finance_summary = pd.read_csv('f_FINANCE_SUMMARY.csv')
-# mr_metrics = pd.read_csv('lf_FINANCE_SUMMARY_METRICS_v.csv')
-# lob_ref = pd.read_csv('MR_LOB_REF.csv')
-# auto_translation = pd.read_csv('auto_translation.csv')
 
-# Create BookDate column for mr_finance_summary
-mr_finance_summary['BookDate'] = pd.to_datetime(
-    mr_finance_summary['BKD_MONTH'].astype(str) + '/01/' + mr_finance_summary['BKD_YR'].astype(str), 
-    format='%m/%d/%Y'
-)
+%LET vyearcalc = %SYSFUNC(YEAR(%SYSFUNC(INTNX(MONTH, %SYSFUNC(TODAY()), -1))));
+%LET vyear = PUT(&vyearcalc, z4.);
+%LET filedate = %SYSFUNC(TODAY(),MMDDYYP10.);
 
-# Merge with LOB_REF to replace LOB values
-mr_finance_summary = pd.merge(mr_finance_summary, lob_ref[['LOB', 'GL_LOB']], 
-                              on=['LOB', 'LOB_CTRL'], how='left')
+PROC SQL;
+   CREATE TABLE GRIDWORK.Financial_Trending AS 
+   SELECT t1.BKD_YR, 
+          t1.BKD_MONTH, 
+          t1.LOB, 
+		  t1.LOB_CTRL,
+          /* SUM_of_WRIT_PREM_AMT */
+            (SUM(t1.WRIT_PREM_AMT)) FORMAT=20.5 AS SUM_of_WRIT_PREM_AMT, 
+          /* SUM_of_ERND_PREM_AMT */
+            (SUM(t1.ERND_PREM_AMT)) FORMAT=20.5 AS SUM_of_ERND_PREM_AMT 
+      FROM SF_FNRPT.f_FINANCE_SUMMARY t1
+      WHERE t1.BKD_YR = &vyear
+      GROUP BY t1.BKD_YR,
+               t1.BKD_MONTH,
+               t1.LOB,
+			   t1.LOB_CTRL
+      ORDER BY 
+               t1.LOB,
+			   t1.LOB_CTRL,
+               t1.BKD_YR,
+               t1.BKD_MONTH;
+QUIT;
+PROC EXPORT DATA=GRIDWORK.Financial_Trending
+FILE="/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Local_Access/Fin/Reports/MRBookCloseValidation/Financial_Trending_Prem &filedate..csv"
+DBMS=CSV
+REPLACE;
+RUN;
+QUIT;
 
-# Data transformation for Earned Premium aggregation (MR_EP_temp)
-mr_finance_summary['State'] = mr_finance_summary['CVRG_ST_ABBR_CD'].apply(
-    lambda x: 'State NA' if x in (' ', '', 'XX') else x)
-mr_finance_summary['Distribution'] = mr_finance_summary['BRAND'].apply(
-    lambda x: 'Safeco' if x == 'S1' else 'Liberty')
 
-mr_finance_summary['Line'] = mr_finance_summary.apply(
-    lambda x: x['GL_LOB'] if x['LOB'] in ['Antique Auto', 'Auto', 'Classic Car Regular Use', 'Classic Car Restricted Use', 
-                                          'Motor Home', 'Motorcycle', 'Trailer'] else x['LOB'], axis=1)
+ FILENAME Mailbox EMAIL;
+DATA _NULL_;
+		FILE Mailbox 
+	TO=('MSR_SYS_SUPPORT@LibertyMutual.com'
+'Kendrick.Perry@LibertyMutual.com'
+'carmen.louie@libertymutual.com'
+'shagun.agarwal@libertymutual.com'
+'mahalakshmi.kadirannagaripally@libertymutual.com'
+/*'kavisha.gupta@libertymutual.com'*/
+/*'amit.kumar13@libertymutual.com'*/
+'daniel.sepulveda@libertymutual.com')
+    ATTACH=("/usr/apps/sasdata/financial_centrify/Fin_HO_Sec/Local_Access/Fin/Reports/MRBookCloseValidation/Financial_Trending_Prem &filedate..csv"
+	CONTENT_TYPE="text/html")
+	SUBJECT="Management Reporting Financial Trending Premium Book Close Validation";
+	PUT "Please see the attached MR Financial Trending Premium Book Close Validations. PLEASE NOTE: This is an automated email. Please contact Kendrick Perry at Kendrick.Perry@LibertyMutual.com with any questions.";
+	RUN;
+	QUIT;
 
-mr_finance_summary['Vol_Invol'] = mr_finance_summary['VOLNTRY_INVOL_CD'].apply(
-    lambda x: 'Voluntary' if x in ('', ' ', '~') else x)
-
-# Aggregating Earned Premium
-mr_ep_temp = mr_finance_summary.groupby(['State', 'Distribution', 'Line', 'Vol_Invol'])['ERND_PREM_AMT'].sum().reset_index()
-
-# Create BookDate column for mr_metrics
-mr_metrics['BookDate'] = pd.to_datetime(
-    mr_metrics['BKD_MONTH'].astype(str) + '/01/' + mr_metrics['BKD_YR'].astype(str), 
-    format='%m/%d/%Y'
-)
-
-mr_metrics['State'] = mr_metrics['CVRG_ST_ABBR_CD'].apply(
-    lambda x: 'State NA' if x in (' ', '', 'XX') else x)
-mr_metrics['Distribution'] = mr_metrics['BRAND'].apply(
-    lambda x: 'Safeco' if x == 'S1' else 'Liberty')
-
-mr_metrics['Line'] = mr_metrics.apply(
-    lambda x: x['Line'] if x['LOB'] in ['Antique Auto', 'Auto', 'Classic Car Regular Use', 'Classic Car Restricted Use', 
-                                        'Motor Home', 'Motorcycle', 'Trailer'] else x['LOB'], axis=1)
-
-mr_metrics['Vol_Invol'] = mr_metrics['VOLNTRY_INVOL_CD'].apply(
-    lambda x: 'Voluntary' if x in ('', ' ', '~') else x)
-
-# Aggregating PIF
-mr_pif_temp = mr_metrics.groupby(['State', 'Distribution', 'Line', 'Vol_Invol'])['PIF_CNT'].sum().reset_index()
-
-# Calculate Allocation Stats (EP and PIF)
-ep_grouped = mr_ep_temp.groupby(['State', 'Distribution', 'Line'])['ERND_PREM_AMT'].sum().reset_index()
-ep_ungrouped = mr_ep_temp.groupby(['Distribution', 'Line'])['ERND_PREM_AMT'].sum().reset_index()
-
-ep_allocation_stats = pd.merge(ep_grouped, ep_ungrouped, on=['Distribution', 'Line'], how='outer', suffixes=('_Grouped', '_Ungrouped'))
-ep_allocation_stats['Alloc_Stat'] = ep_allocation_stats['ERND_PREM_AMT_Grouped'] / ep_allocation_stats['ERND_PREM_AMT_Ungrouped']
-ep_allocation_stats = ep_allocation_stats[ep_allocation_stats['Alloc_Stat'] > 0]
-
-# PIF Allocation Stats
-pif_grouped = mr_pif_temp.groupby(['State', 'Distribution', 'Line'])['PIF_CNT'].sum().reset_index()
-pif_ungrouped = mr_pif_temp.groupby(['Distribution', 'Line'])['PIF_CNT'].sum().reset_index()
-
-pif_allocation_stats = pd.merge(pif_grouped, pif_ungrouped, on=['Distribution', 'Line'], how='outer', suffixes=('_Grouped', '_Ungrouped'))
-pif_allocation_stats['Alloc_Stat'] = pif_allocation_stats['PIF_CNT_Grouped'] / pif_allocation_stats['PIF_CNT_Ungrouped']
-pif_allocation_stats = pif_allocation_stats[pif_allocation_stats['Alloc_Stat'] > 0]
-
-# Merge EP and PIF allocation stats
-combined_stats = pd.merge(
-    ep_allocation_stats[['State', 'Distribution', 'Line', 'Alloc_Stat']],
-    pif_allocation_stats[['State', 'Distribution', 'Line', 'Alloc_Stat']],
-    on=['State', 'Distribution', 'Line'],
-    how='outer',
-    suffixes=('_EP', '_PIF')
-)
-
-# Calculate final allocation
-combined_stats['final_alloc'] = combined_stats.apply(
-    lambda row: 0.5 * (row['Alloc_Stat_EP'] + row['Alloc_Stat_PIF']) if pd.notna(row['Alloc_Stat_PIF']) else row['Alloc_Stat_EP'],
-    axis=1
-)
-
-# Filter for valid allocation stats
-combined_stats = combined_stats[combined_stats['final_alloc'] > 0]
-
-# Final combined allocation stats (ep_allocation_stats + pif_allocation_stats)
-combined_stats.to_csv('final_combined_allocation.csv', index=False)
-
-# Or, if needed, save to a database
-# combined_stats.to_sql('alloc_stats_combined', engine, if_exists='replace', index=False)
-
-print("Final combined allocation stats have been saved.")
