@@ -1,7 +1,9 @@
-historical_ddf['BookDate'] = pd.to_datetime(
-    historical_ddf['Month'].astype(str) + '/01/' + historical_ddf['Year'].astype(str),
-    format='%m/%d/%Y'
-)
-
-# Now format the datetime to '1Jan2023'
-historical_ddf['FormattedDate'] = historical_ddf['BookDate'].dt.strftime('%d%b%Y')
+proc sql;
+   insert into work.my_data
+        set name = "Meghan",
+            salary = 52000,
+            birthdate = "04APR1989"d
+         set name = "Joe",
+            salary = 48000,
+	    birthdate = "27NOV1994"d;
+quit;
