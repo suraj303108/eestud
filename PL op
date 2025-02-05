@@ -7,3 +7,7 @@ proc sql;
             salary = 48000,
 	    birthdate = "27NOV1994"d;
 quit;
+data new_dataset;
+    set old_dataset;
+    if column_name = . then column_name = 0; /* Replace missing values with 0 */
+run;
