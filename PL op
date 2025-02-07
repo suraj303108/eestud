@@ -1,21 +1,81 @@
-let
-  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
-  #"Filtered rows" = Table.SelectRows(Source, each Text.EndsWith([Folder Path], "USRM Versions SC TL/")),
-  #"Filtered hidden files" = Table.SelectRows(#"Filtered rows", each [Attributes]?[Hidden]? <> true),
-  #"Invoke custom function" = Table.AddColumn(#"Filtered hidden files", "Transform file (8)", each #"Transform file (8)"([Content])),
-  #"Renamed columns" = Table.RenameColumns(#"Invoke custom function", {{"Name", "Source.Name"}}),
-  #"Removed other columns" = Table.SelectColumns(#"Renamed columns", {"Source.Name", "Transform file (8)"}),
-  #"Expanded table column" = Table.ExpandTableColumn(#"Removed other columns", "Transform file (8)", Table.ColumnNames(#"Transform file (8)"(#"Sample file (8)"))),
-  #"Changed column type" = Table.TransformColumnTypes(#"Expanded table column", {{"Line Item", type text}, {"Segment", type text}, {"LOB", type text}, {"Channel Hierarchy", type text}, {"RI Code", type text}, {"State", type text}, {"SC Reinsurance Code", type text}, {"Period", type date}, {"Value", type number}}),
-  #"Added Version" = Table.AddColumn(#"Changed column type", "Version", each Text.Middle([Source.Name], 40, 4), type text),
-  #"Removed Columns2" = Table.RemoveColumns(#"Added Version", {"Source.Name"}),
-  #"Replaced Value" = Table.ReplaceValue(#"Removed Columns2"," - Reinsurance","",Replacer.ReplaceText,{"Line Item"}),
-  #"Renamed Columns1" = Table.RenameColumns(#"Replaced Value", {{"Channel Hierarchy", "Channel"}, {"LOB", "Line"}, {"Line Item", "Account"}, {"State", "States"}, {"Value", "Amount"}, {"Period", "Book Date"}}),
-  #"Added State" = Table.AddColumn(#"Renamed Columns1", "State", each if [#"States"] = "State NA" then "State NA" else if [#"States"] = "" then "State NA" else Text.Start([#"States"],2)),
-  #"Added Distribution" = Table.AddColumn(#"Added State", "Distribution", each [#"Segment"] & "-" & [#"Channel"]),
-  #"Added Reinsurance" = Table.AddColumn(#"Added Distribution", "Reinsurance", each if [#"RI Code"] = "" & [SC Reinsurance Code] = "" then "" else if [#"RI Code"] = "" then [SC Reinsurance Code] else if [SC Reinsurance Code] = "" then [#"RI Code"] else "NA"),
-  #"Removed Columns" = Table.RemoveColumns(#"Added Reinsurance", {"RI Code", "States", "SC Reinsurance Code", "DAC Accounts"}),
-  #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Book Date", type date}, {"Distribution", type text}, {"Reinsurance", type text}, {"State", type text}, {"Amount", type number}}),
-  #"Filtered rows 1" = Table.SelectRows(#"Changed Type", each ([Account] <> "NB Policy Count" and [Account] <> "RB Policy Count"))
-in
-  #"Filtered rows 1"
+import pandas as pd
+from sharepoint import SharePointSite
+from io import StringIO
+
+# Assuming you have a SharePoint connection set up, for example using Office365-REST-Python-Client
+site_url = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy"
+folder_path = "USRM Versions SC TL/"
+
+# SharePoint files fetch (You might need a different method here based on your SharePoint library)
+files = get_sharepoint_files(site_url, folder_path)  # You need a function to fetch files
+
+# Convert files to dataframe (assuming file content is CSV, change if necessary)
+dfs = []
+for file in files:
+    content = file['Content']
+    df = pd.read_csv(StringIO(content))
+    dfs.append(df)
+
+# Combine all dataframes into one
+df = pd.concat(dfs, ignore_index=True)
+
+# Filter out hidden files based on attributes (if you have a column for that)
+df = df[df['Attributes.Hidden'] != True]
+
+# Assuming the custom transformation function "Transform file (8)" needs to be applied
+df_transformed = transform_file_8(df)  # You should define how this transformation works
+
+# Rename columns
+df_transformed = df_transformed.rename(columns={
+    'Name': 'Source.Name',
+    'Channel Hierarchy': 'Channel',
+    'LOB': 'Line',
+    'Line Item': 'Account',
+    'State': 'States',
+    'Value': 'Amount',
+    'Period': 'Book Date'
+})
+
+# Remove unnecessary columns
+df_transformed = df_transformed[['Source.Name', 'Transform file (8)']]
+
+# Expand the table column (apply transformation if needed)
+df_transformed = pd.concat([df_transformed.drop('Transform file (8)', axis=1), df_transformed['Transform file (8)'].apply(pd.Series)], axis=1)
+
+# Change column types
+df_transformed['Book Date'] = pd.to_datetime(df_transformed['Book Date'])
+df_transformed['Amount'] = pd.to_numeric(df_transformed['Amount'], errors='coerce')
+
+# Add version column (extract version from Source.Name)
+df_transformed['Version'] = df_transformed['Source.Name'].str.slice(40, 44)
+
+# Replace text
+df_transformed['Account'] = df_transformed['Account'].str.replace(" - Reinsurance", "", regex=False)
+
+# Add State column (simplifying logic for this example)
+df_transformed['State'] = df_transformed['States'].apply(lambda x: 'State NA' if x == 'State NA' or x == '' else x[:2])
+
+# Add Distribution
+df_transformed['Distribution'] = df_transformed['Segment'] + '-' + df_transformed['Channel']
+
+# Add Reinsurance column (logic based on RI Code and SC Reinsurance Code)
+def reinsurance(row):
+    if row['RI Code'] == "" and row['SC Reinsurance Code'] == "":
+        return ""
+    elif row['RI Code'] == "":
+        return row['SC Reinsurance Code']
+    elif row['SC Reinsurance Code'] == "":
+        return row['RI Code']
+    else:
+        return "NA"
+
+df_transformed['Reinsurance'] = df_transformed.apply(reinsurance, axis=1)
+
+# Remove unwanted columns
+df_transformed = df_transformed.drop(columns=['RI Code', 'States', 'SC Reinsurance Code', 'DAC Accounts'])
+
+# Filter rows (exclude "NB Policy Count" and "RB Policy Count" from Account column)
+df_transformed = df_transformed[~df_transformed['Account'].isin(['NB Policy Count', 'RB Policy Count'])]
+
+# Display or save the transformed data
+df_transformed.to_csv('transformed_data.csv', index=False)
