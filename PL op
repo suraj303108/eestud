@@ -1,91 +1,21 @@
-import pandas as pd
-
-# Step 1: Assuming the DataFrame 'df' has already been loaded (from SharePoint or a file).
-# Example:
-# df = pd.read_csv('your_file.csv')
-
-# Example DataFrame setup (you will replace this with actual data from SharePoint)
-data = {
-    "Source.Name": ["File1", "File2", "File3"],
-    "Line Item": ["DAC Amortization - Accounts", "DAC Capitalization - Accounts", "Other"],
-    "Brand Hierarchy": ["LM", "LM", "Other"],
-    "Channel Hierarchy": ["Platform", "Web", "Mobile"],
-    "State": ["State NA", "", "NY"],
-    "LOB": ["LOB1", "LOB2", "LOB3"],
-    "Period": ["2021-01-01", "2021-02-01", "2021-03-01"],
-    "Value": [1000, 2000, 3000],
-    "DAC Accounts": ["Acc1", "", "Acc2"],
-    "RI Code": ["RI Direct", "", "RI-Non CUNA Earned Premium - Assumed"],
-    "Segment: PL": ["PL Segment", "", "PL Segment"]
-}
-
-df = pd.DataFrame(data)
-
-# Step 2: Change column types
-df['Source.Name'] = df['Source.Name'].astype(str)
-df['Line Item'] = df['Line Item'].astype(str)
-df['Brand Hierarchy'] = df['Brand Hierarchy'].astype(str)
-df['Channel Hierarchy'] = df['Channel Hierarchy'].astype(str)
-df['State'] = df['State'].astype(str)
-df['LOB'] = df['LOB'].astype(str)
-df['Period'] = pd.to_datetime(df['Period'])
-df['Value'] = pd.to_numeric(df['Value'])
-df['DAC Accounts'] = df['DAC Accounts'].astype(str)
-df['RI Code'] = df['RI Code'].astype(str)
-df['Segment: PL'] = df['Segment: PL'].astype(str)
-
-# Step 3: Add Version column (substring of "Source.Name")
-df['Version'] = df['Source.Name'].str[40:44]  # Adjust the position as needed
-
-# Step 4: Remove the "Source.Name" column
-df = df.drop(columns=["Source.Name"])
-
-# Step 5: Rename columns
-df = df.rename(columns={"LOB": "Line", "Channel Hierarchy": "Channel", "State": "States", 
-                        "Value": "Amount", "Segment: PL": "Segment", "Period": "Book Date"})
-
-# Step 6: Trim "Line Item"
-df['Line Item'] = df['Line Item'].str.strip()
-
-# Step 7: Replace specific values in the "Line Item" column
-df['Line Item'] = df['Line Item'].replace("DAC Amortization - Accounts", "DAC Amortization")
-df['Line Item'] = df['Line Item'].replace("DAC Capitalization - Accounts", "DAC Capitalization")
-
-# Step 8: Add State column based on conditions
-df['State'] = df['States'].apply(lambda x: "State NA" if x == "State NA" or x == "" else x[:2])
-
-# Step 9: Add Distribution column based on conditions
-df['Distribution'] = df.apply(
-    lambda row: "LM Platform" if row['Brand Hierarchy'] == "LM" and row['Channel'] == "Platform" else
-    f"{row['Segment']}-{row['Channel']}" if row['Segment'] != "" and row['Channel'] != "No_Channel" else
-    f"PL Segment-{row['Brand Hierarchy']}{row['Channel']}" if row['Segment'] == "" and row['Channel'] == "No_Channel" else
-    row['Channel'], axis=1)
-
-# Step 10: Add Account column based on conditions
-df['Account'] = df.apply(lambda row: f"{row['Line Item']} - {row['DAC Accounts']}" if row['DAC Accounts'] != "" else row['Line Item'], axis=1)
-
-# Step 11: Add Reinsurance column based on conditions
-df['Reinsurance'] = df.apply(
-    lambda row: "GP" if (row['RI Code'] == "" and (row['Account'] == "DAC Amortization" or row['Account'] == "DAC Capitalization")) else
-    "Direct" if row['RI Code'] == "RI Direct" else
-    "Assumed" if row['Account'] == "RI-Non CUNA Earned Premium - Assumed" else
-    "Ceded" if row['Account'] == "RI-Non CUNA Earned Premium - Ceded" else
-    row['RI Code'] if row['RI Code'] != "" else "Direct", axis=1)
-
-# Step 12: Remove unnecessary columns
-df = df.drop(columns=["Brand Hierarchy", "Line Item", "RI Code", "DAC Accounts", "States"])
-
-# Step 13: Change column types again if necessary
-df['State'] = df['State'].astype(str)
-df['Distribution'] = df['Distribution'].astype(str)
-df['Reinsurance'] = df['Reinsurance'].astype(str)
-df['Account'] = df['Account'].astype(str)
-
-# Step 14: Replace empty strings in the "Segment" column with "PL Segment"
-df['Segment'] = df['Segment'].replace("", "PL Segment")
-
-# Step 15: Replace specific values in the "Distribution" column
-df['Distribution'] = df['Distribution'].replace("IA (Vol) State Auto", "PL Segment-IA (Vol) State Auto")
-
-# Final DataFrame
-print(df)
+let
+  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
+  #"Filtered rows" = Table.SelectRows(Source, each Text.EndsWith([Folder Path], "USRM Versions SC TL/")),
+  #"Filtered hidden files" = Table.SelectRows(#"Filtered rows", each [Attributes]?[Hidden]? <> true),
+  #"Invoke custom function" = Table.AddColumn(#"Filtered hidden files", "Transform file (8)", each #"Transform file (8)"([Content])),
+  #"Renamed columns" = Table.RenameColumns(#"Invoke custom function", {{"Name", "Source.Name"}}),
+  #"Removed other columns" = Table.SelectColumns(#"Renamed columns", {"Source.Name", "Transform file (8)"}),
+  #"Expanded table column" = Table.ExpandTableColumn(#"Removed other columns", "Transform file (8)", Table.ColumnNames(#"Transform file (8)"(#"Sample file (8)"))),
+  #"Changed column type" = Table.TransformColumnTypes(#"Expanded table column", {{"Line Item", type text}, {"Segment", type text}, {"LOB", type text}, {"Channel Hierarchy", type text}, {"RI Code", type text}, {"State", type text}, {"SC Reinsurance Code", type text}, {"Period", type date}, {"Value", type number}}),
+  #"Added Version" = Table.AddColumn(#"Changed column type", "Version", each Text.Middle([Source.Name], 40, 4), type text),
+  #"Removed Columns2" = Table.RemoveColumns(#"Added Version", {"Source.Name"}),
+  #"Replaced Value" = Table.ReplaceValue(#"Removed Columns2"," - Reinsurance","",Replacer.ReplaceText,{"Line Item"}),
+  #"Renamed Columns1" = Table.RenameColumns(#"Replaced Value", {{"Channel Hierarchy", "Channel"}, {"LOB", "Line"}, {"Line Item", "Account"}, {"State", "States"}, {"Value", "Amount"}, {"Period", "Book Date"}}),
+  #"Added State" = Table.AddColumn(#"Renamed Columns1", "State", each if [#"States"] = "State NA" then "State NA" else if [#"States"] = "" then "State NA" else Text.Start([#"States"],2)),
+  #"Added Distribution" = Table.AddColumn(#"Added State", "Distribution", each [#"Segment"] & "-" & [#"Channel"]),
+  #"Added Reinsurance" = Table.AddColumn(#"Added Distribution", "Reinsurance", each if [#"RI Code"] = "" & [SC Reinsurance Code] = "" then "" else if [#"RI Code"] = "" then [SC Reinsurance Code] else if [SC Reinsurance Code] = "" then [#"RI Code"] else "NA"),
+  #"Removed Columns" = Table.RemoveColumns(#"Added Reinsurance", {"RI Code", "States", "SC Reinsurance Code", "DAC Accounts"}),
+  #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Book Date", type date}, {"Distribution", type text}, {"Reinsurance", type text}, {"State", type text}, {"Amount", type number}}),
+  #"Filtered rows 1" = Table.SelectRows(#"Changed Type", each ([Account] <> "NB Policy Count" and [Account] <> "RB Policy Count"))
+in
+  #"Filtered rows 1"
