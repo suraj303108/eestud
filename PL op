@@ -1,99 +1,22 @@
-import pandas as pd
-import sharepy
-
-# Step 1: Authenticate with SharePoint (example with sharepy library)
-s = sharepy.connect("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", username="your_username", password="your_password")
-
-# Step 2: Get the SharePoint files (assuming you already have access to them)
-files = s.get("/sites/GRMFSDataStrategy/Shared Documents/USRM Versions PL TL/")  # Modify the file path as needed
-
-# Step 3: Load the data (Assuming files are CSV or Excel files)
-# Example of reading CSV files from SharePoint - update this as per your file type and path
-file_url = "path_to_your_file"
-df = pd.read_csv(file_url)
-
-# Step 4: Filter out hidden files (assuming you have metadata to indicate if hidden)
-df_filtered = df[df['Attributes'] != 'hidden']  # Example filter (you may need to adjust based on actual data)
-
-# Step 5: Add transformed data (custom function replacement)
-# Assuming your transformation is a custom function, replicate it here
-def transform_file(file_content):
-    # Implement your custom transformation logic here
-    return file_content
-
-df_filtered['TransformedData'] = df_filtered['Content'].apply(transform_file)
-
-# Step 6: Rename columns
-df_filtered = df_filtered.rename(columns={"Name": "Source.Name"})
-
-# Step 7: Select necessary columns
-df_filtered = df_filtered[['Source.Name', 'TransformedData']]
-
-# Step 8: Expand the "TransformedData" column (assuming it's a nested table, list, or json)
-df_expanded = pd.json_normalize(df_filtered['TransformedData'])
-
-# Step 9: Change data types of specific columns
-df_expanded['Source.Name'] = df_expanded['Source.Name'].astype(str)
-df_expanded['Line Item'] = df_expanded['Line Item'].astype(str)
-df_expanded['Value'] = df_expanded['Value'].astype(float)
-
-# Step 10: Add a version column
-df_expanded['Version'] = df_expanded['Source.Name'].str[40:44]
-
-# Step 11: Remove the 'Source.Name' column
-df_expanded = df_expanded.drop(columns=['Source.Name'])
-
-# Step 12: Rename columns again
-df_expanded = df_expanded.rename(columns={
-    "LOB": "Line", 
-    "Channel Hierarchy": "Channel", 
-    "State": "States", 
-    "Value": "Amount", 
-    "Segment: PL": "Segment", 
-    "Period": "Book Date"
-})
-
-# Step 13: Trim whitespace from "Line Item" column
-df_expanded['Line Item'] = df_expanded['Line Item'].str.strip()
-
-# Step 14: Replace specific values in "Line Item"
-df_expanded['Line Item'] = df_expanded['Line Item'].replace({
-    "DAC Amortization - Accounts": "DAC Amortization",
-    "DAC Capitalization - Accounts": "DAC Capitalization"
-})
-
-# Step 15: Add additional columns based on conditions
-df_expanded['State'] = df_expanded['States'].apply(lambda x: "State NA" if x == "State NA" or x == "" else x[:2])
-df_expanded['Distribution'] = df_expanded.apply(lambda row: "LM Platform" if row['Brand Hierarchy'] == "LM" and row['Channel'] == "Platform"
-                                               else f"{row['Segment']}-{row['Brand Hierarchy']}{row['Channel']}" if row['Segment'] != "" 
-                                               else row['Channel'], axis=1)
-
-df_expanded['Account'] = df_expanded.apply(lambda row: f"{row['Line Item']} - {row['DAC Accounts']}" if row['DAC Accounts'] != "" 
-                                           else row['Line Item'], axis=1)
-
-# Step 16: Add a "Reinsurance" column based on conditions
-def reinsurance(row):
-    if row['RI Code'] == "" and (row['Account'] == "DAC Amortization" or row['Account'] == "DAC Capitalization"):
-        return "GP"
-    elif row['RI Code'] == "RI Direct":
-        return "Direct"
-    elif row['Account'] == "RI-Non CUNA Earned Premium - Assumed":
-        return "Assumed"
-    elif row['Account'] == "RI-Non CUNA Earned Premium - Ceded":
-        return "Ceded"
-    elif row['RI Code'] != "":
-        return row['RI Code']
-    else:
-        return "Direct"
-
-df_expanded['Reinsurance'] = df_expanded.apply(reinsurance, axis=1)
-
-# Step 17: Remove unnecessary columns
-df_expanded = df_expanded.drop(columns=['Brand Hierarchy', 'Line Item', 'RI Code', 'DAC Accounts', 'States'])
-
-# Step 18: Replace specific values in columns
-df_expanded['Segment'] = df_expanded['Segment'].replace("", "PL Segment")
-df_expanded['Distribution'] = df_expanded['Distribution'].replace("IA (Vol) State Auto", "PL Segment-IA (Vol) State Auto")
-
-# Final output
-print(df_expanded)
+let
+  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
+  #"Filtered rows" = Table.SelectRows(Source, each Text.EndsWith([Folder Path], "USRM Versions PL OP/")),
+  #"Filtered hidden files" = Table.SelectRows(#"Filtered rows", each [Attributes]?[Hidden]? <> true),
+  #"Invoke custom function" = Table.AddColumn(#"Filtered hidden files", "Transform file (5)", each #"Transform file (5)"([Content])),
+  #"Renamed columns" = Table.RenameColumns(#"Invoke custom function", {{"Name", "Source.Name"}}),
+  #"Removed other columns" = Table.SelectColumns(#"Renamed columns", {"Source.Name", "Transform file (5)"}),
+  #"Expanded table column" = Table.ExpandTableColumn(#"Removed other columns", "Transform file (5)", Table.ColumnNames(#"Transform file (5)"(#"Sample file (5)"))),
+  #"Changed column type" = Table.TransformColumnTypes(#"Expanded table column", {{"Source.Name", type text}, {"Line Item", type text}, {"Brand", type text}, {"Channel", type text}, {"SS_States: US States", type text}, {"SS_LOB: Export Metric", type text}, {"Period", type date}, {"Value", type number}}),
+  #"Added Version" = Table.AddColumn(#"Changed column type", "Version", each Text.Middle([Source.Name], 44, 4), type text),
+  #"Removed Columns2" = Table.RemoveColumns(#"Added Version", {"Source.Name"}),
+  #"Replaced Value" = Table.ReplaceValue(#"Removed Columns2","State N/A","State NA",Replacer.ReplaceText,{"SS_States: US States"}),
+  #"Added State" = Table.AddColumn(#"Replaced Value", "State", each if [#"SS_States: US States"] = "State NA" then "State NA" else if [#"SS_States: US States"] = "" then "State NA" else Text.Start([#"SS_States: US States"],2)),
+  #"Added Distribution" = Table.TransformColumnTypes(Table.AddColumn(#"Added State", "Distribution", each if [Brand] = "LM" then  if [#"Channel"] = "Platform" then "LM Platform" else [#"Channel"] else [#"Channel"]), {{"Distribution", type text}}),
+  #"Added Reinsurance" = Table.TransformColumnTypes(Table.AddColumn(#"Added Distribution", "Reinsurance", each "Direct"), {{"Reinsurance", type text}}),
+  #"Added Segment" = Table.TransformColumnTypes(Table.AddColumn(#"Added Reinsurance", "Segment", each "PL Segment"), {{"Segment", type text}}),
+  #"Renamed Columns" = Table.RenameColumns(#"Added Segment",{{"SS_LOB: Export Metric", "Line"}, {"Line Item", "Account"}}),
+  #"Removed Brand & US States" = Table.RemoveColumns(#"Renamed Columns",{"Brand", "SS_States: US States"}),
+  #"Changed Type1" = Table.TransformColumnTypes(#"Removed Brand & US States",{{"State", type text}, {"Value", type number}, {"Period", type date}}),
+  #"Renamed Columns1" = Table.RenameColumns(#"Changed Type1", {{"Value", "Amount"}, {"Period", "Book Date"}})
+in
+  #"Renamed Columns1"
