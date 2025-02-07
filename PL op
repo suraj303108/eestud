@@ -1,14 +1,69 @@
-"Changed column type" = Table.TransformColumnTypes(#"Expanded table column", {{"Source.Name", type text}, {"Line Item", type text}, {"Brand", type text}, {"Channel", type text}, {"SS_States: US States", type text}, {"SS_LOB: Export Metric", type text}, {"Period", type date}, {"Value", type number}}),
-  #"Added Version" = Table.AddColumn(#"Changed column type", "Version", each Text.Middle([Source.Name], 44, 4), type text),
-  #"Removed Columns2" = Table.RemoveColumns(#"Added Version", {"Source.Name"}),
-  #"Replaced Value" = Table.ReplaceValue(#"Removed Columns2","State N/A","State NA",Replacer.ReplaceText,{"SS_States: US States"}),
-  #"Added State" = Table.AddColumn(#"Replaced Value", "State", each if [#"SS_States: US States"] = "State NA" then "State NA" else if [#"SS_States: US States"] = "" then "State NA" else Text.Start([#"SS_States: US States"],2)),
-  #"Added Distribution" = Table.TransformColumnTypes(Table.AddColumn(#"Added State", "Distribution", each if [Brand] = "LM" then  if [#"Channel"] = "Platform" then "LM Platform" else [#"Channel"] else [#"Channel"]), {{"Distribution", type text}}),
-  #"Added Reinsurance" = Table.TransformColumnTypes(Table.AddColumn(#"Added Distribution", "Reinsurance", each "Direct"), {{"Reinsurance", type text}}),
-  #"Added Segment" = Table.TransformColumnTypes(Table.AddColumn(#"Added Reinsurance", "Segment", each "PL Segment"), {{"Segment", type text}}),
-  #"Renamed Columns" = Table.RenameColumns(#"Added Segment",{{"SS_LOB: Export Metric", "Line"}, {"Line Item", "Account"}}),
-  #"Removed Brand & US States" = Table.RemoveColumns(#"Renamed Columns",{"Brand", "SS_States: US States"}),
-  #"Changed Type1" = Table.TransformColumnTypes(#"Removed Brand & US States",{{"State", type text}, {"Value", type number}, {"Period", type date}}),
-  #"Renamed Columns1" = Table.RenameColumns(#"Changed Type1", {{"Value", "Amount"}, {"Period", "Book Date"}})
-in
-  #"Renamed Columns1"
+import pandas as pd
+
+# Step 1: Read the data into a pandas DataFrame (replace with actual data source)
+# Assuming 'df' is the DataFrame obtained from your data source
+# Example: df = pd.read_csv('your_file.csv')
+
+# Example of DataFrame
+data = {
+    "Source.Name": ["File1", "File2", "File3"],
+    "Line Item": ["Item1", "Item2", "Item3"],
+    "Brand": ["LM", "LM", "Other"],
+    "Channel": ["Platform", "Web", "Mobile"],
+    "SS_States: US States": ["State N/A", "", "CA"],
+    "SS_LOB: Export Metric": ["LOB1", "LOB2", "LOB3"],
+    "Period": ["2021-01-01", "2021-02-01", "2021-03-01"],
+    "Value": [1000, 2000, 3000]
+}
+
+# Convert the data into a pandas DataFrame
+df = pd.DataFrame(data)
+
+# Step 2: Change column types
+df['Source.Name'] = df['Source.Name'].astype(str)
+df['Line Item'] = df['Line Item'].astype(str)
+df['Brand'] = df['Brand'].astype(str)
+df['Channel'] = df['Channel'].astype(str)
+df['SS_States: US States'] = df['SS_States: US States'].astype(str)
+df['SS_LOB: Export Metric'] = df['SS_LOB: Export Metric'].astype(str)
+df['Period'] = pd.to_datetime(df['Period'])
+df['Value'] = pd.to_numeric(df['Value'])
+
+# Step 3: Add Version column (substring of "Source.Name")
+df['Version'] = df['Source.Name'].str[44:48]  # Adjust position as needed
+
+# Step 4: Remove "Source.Name" column
+df = df.drop(columns=["Source.Name"])
+
+# Step 5: Replace "State N/A" with "State NA"
+df['SS_States: US States'] = df['SS_States: US States'].replace("State N/A", "State NA")
+
+# Step 6: Add State column based on conditions
+df['State'] = df['SS_States: US States'].apply(lambda x: "State NA" if x == "State NA" or x == "" else x[:2])
+
+# Step 7: Add Distribution column with logic
+df['Distribution'] = df.apply(lambda row: "LM Platform" if row['Brand'] == "LM" and row['Channel'] == "Platform"
+                              else row['Channel'], axis=1)
+
+# Step 8: Add Reinsurance column (with default value "Direct")
+df['Reinsurance'] = "Direct"
+
+# Step 9: Add Segment column (with default value "PL Segment")
+df['Segment'] = "PL Segment"
+
+# Step 10: Rename columns
+df = df.rename(columns={"SS_LOB: Export Metric": "Line", "Line Item": "Account"})
+
+# Step 11: Remove "Brand" and "SS_States: US States" columns
+df = df.drop(columns=['Brand', 'SS_States: US States'])
+
+# Step 12: Change types of certain columns
+df['State'] = df['State'].astype(str)
+df['Amount'] = df['Value']  # Rename 'Value' to 'Amount'
+df['Book Date'] = pd.to_datetime(df['Period'])
+
+# Step 13: Final column renaming
+df = df.rename(columns={"Value": "Amount", "Period": "Book Date"})
+
+# Step 14: Output the final DataFrame
+print(df)
