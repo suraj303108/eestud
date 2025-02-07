@@ -1,69 +1,36 @@
-import pandas as pd
-
-# Step 1: Read the data into a pandas DataFrame (replace with actual data source)
-# Assuming 'df' is the DataFrame obtained from your data source
-# Example: df = pd.read_csv('your_file.csv')
-
-# Example of DataFrame
-data = {
-    "Source.Name": ["File1", "File2", "File3"],
-    "Line Item": ["Item1", "Item2", "Item3"],
-    "Brand": ["LM", "LM", "Other"],
-    "Channel": ["Platform", "Web", "Mobile"],
-    "SS_States: US States": ["State N/A", "", "CA"],
-    "SS_LOB: Export Metric": ["LOB1", "LOB2", "LOB3"],
-    "Period": ["2021-01-01", "2021-02-01", "2021-03-01"],
-    "Value": [1000, 2000, 3000]
-}
-
-# Convert the data into a pandas DataFrame
-df = pd.DataFrame(data)
-
-# Step 2: Change column types
-df['Source.Name'] = df['Source.Name'].astype(str)
-df['Line Item'] = df['Line Item'].astype(str)
-df['Brand'] = df['Brand'].astype(str)
-df['Channel'] = df['Channel'].astype(str)
-df['SS_States: US States'] = df['SS_States: US States'].astype(str)
-df['SS_LOB: Export Metric'] = df['SS_LOB: Export Metric'].astype(str)
-df['Period'] = pd.to_datetime(df['Period'])
-df['Value'] = pd.to_numeric(df['Value'])
-
-# Step 3: Add Version column (substring of "Source.Name")
-df['Version'] = df['Source.Name'].str[44:48]  # Adjust position as needed
-
-# Step 4: Remove "Source.Name" column
-df = df.drop(columns=["Source.Name"])
-
-# Step 5: Replace "State N/A" with "State NA"
-df['SS_States: US States'] = df['SS_States: US States'].replace("State N/A", "State NA")
-
-# Step 6: Add State column based on conditions
-df['State'] = df['SS_States: US States'].apply(lambda x: "State NA" if x == "State NA" or x == "" else x[:2])
-
-# Step 7: Add Distribution column with logic
-df['Distribution'] = df.apply(lambda row: "LM Platform" if row['Brand'] == "LM" and row['Channel'] == "Platform"
-                              else row['Channel'], axis=1)
-
-# Step 8: Add Reinsurance column (with default value "Direct")
-df['Reinsurance'] = "Direct"
-
-# Step 9: Add Segment column (with default value "PL Segment")
-df['Segment'] = "PL Segment"
-
-# Step 10: Rename columns
-df = df.rename(columns={"SS_LOB: Export Metric": "Line", "Line Item": "Account"})
-
-# Step 11: Remove "Brand" and "SS_States: US States" columns
-df = df.drop(columns=['Brand', 'SS_States: US States'])
-
-# Step 12: Change types of certain columns
-df['State'] = df['State'].astype(str)
-df['Amount'] = df['Value']  # Rename 'Value' to 'Amount'
-df['Book Date'] = pd.to_datetime(df['Period'])
-
-# Step 13: Final column renaming
-df = df.rename(columns={"Value": "Amount", "Period": "Book Date"})
-
-# Step 14: Output the final DataFrame
-print(df)
+let
+  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
+  #"Filtered rows" = Table.SelectRows(Source, each Text.EndsWith([Folder Path], "USRM Versions PL TL/")),
+  #"Filtered hidden files" = Table.SelectRows(#"Filtered rows", each [Attributes]?[Hidden]? <> true),
+  #"Invoke custom function" = Table.AddColumn(#"Filtered hidden files", "Transform file (6)", each #"Transform file (6)"([Content])),
+  #"Renamed columns" = Table.RenameColumns(#"Invoke custom function", {{"Name", "Source.Name"}}),
+  #"Removed other columns" = Table.SelectColumns(#"Renamed columns", {"Source.Name", "Transform file (6)"}),
+  #"Expanded table column" = Table.ExpandTableColumn(#"Removed other columns", "Transform file (6)", Table.ColumnNames(#"Transform file (6)"(#"Sample file (6)"))),
+  #"Changed column type" = Table.TransformColumnTypes(#"Expanded table column", {{"Source.Name", type text}, {"Line Item", type text}, {"Brand Hierarchy", type text}, {"Channel Hierarchy", type text}, {"State", type text}, {"LOB", type text}, {"Period", type date}, {"Value", type number}, {"DAC Accounts", type text}, {"RI Code", type text}, {"Segment: PL", type text}}),
+  #"Added Version" = Table.AddColumn(#"Changed column type", "Version", each Text.Middle([Source.Name], 40, 4), type text),
+  #"Removed Columns2" = Table.RemoveColumns(#"Added Version", {"Source.Name"}),
+  #"Renamed Columns" = Table.RenameColumns(#"Removed Columns2", {{"LOB", "Line"}, {"Channel Hierarchy", "Channel"}, {"State", "States"}, {"Value", "Amount"}, {"Segment: PL", "Segment"}, {"Period", "Book Date"}}),
+    #"Trimmed Line Item" = Table.TransformColumns(#"Renamed Columns", {{"Line Item", each Text.Trim(_), type nullable text}}),
+  #"Replaced value 2" = Table.ReplaceValue(#"Trimmed Line Item", "DAC Amortization - Accounts", "DAC Amortization", Replacer.ReplaceText, {"Line Item"}),
+  #"Replaced value 3" = Table.ReplaceValue(#"Replaced value 2", "DAC Capitalization - Accounts", "DAC Capitalization", Replacer.ReplaceText, {"Line Item"}),
+    #"Added State" = Table.AddColumn(#"Replaced value 3", "State", each if [#"States"] = "State NA" then "State NA" else if [#"States"] = "" then "State NA" else Text.Start([#"States"],2)),
+    #"Added Distribution" = Table.AddColumn(#"Added State", "Distribution", 
+    each if [Brand Hierarchy] = "LM" and [Channel] = "Platform" then 
+        "LM Platform" 
+    else if [Segment] = "PL Segment" and [Channel] = "No_Channel" then 
+        [Segment] & "-" & [Brand Hierarchy] & [Channel] 
+    else if [Segment] = "" and [Channel] = "No_Channel" then 
+        "PL Segment-" & [Brand Hierarchy] & [Channel] 
+    else if [Segment] = "" then 
+        [Channel] 
+    else 
+        [Segment] & "-" & [Channel]
+),
+    #"Added Account" = Table.AddColumn(#"Added Distribution", "Account", each if [Line Item] = "" and [DAC Accounts] = "" then "" else if [DAC Accounts] <> "" then [Line Item] & " - " & [DAC Accounts] else [Line Item]),
+    #"Added Reinsurance" = Table.AddColumn(#"Added Account", "Reinsurance", each if  ([RI Code] = "" and ([Account] = "DAC Amortization" or [Account] = "DAC Capitalization")) then "GP" else if [RI Code] = "RI Direct" then "Direct" else if [Account] = "RI-Non CUNA Earned Premium - Assumed" then "Assumed" else if [Account] = "RI-Non CUNA Earned Premium - Ceded" then "Ceded" else if [RI Code] <> "" then [RI Code] else "Direct"),
+    #"Removed Columns3" = Table.RemoveColumns(#"Added Reinsurance",{"Brand Hierarchy", "Line Item", "RI Code", "DAC Accounts", "States"}),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Removed Columns3", {{"State", type text}, {"Distribution", type text}, {"Reinsurance", type text}, {"Account", type text}}),
+    #"Replaced Value" = Table.ReplaceValue(#"Changed Type1","","PL Segment",Replacer.ReplaceValue,{"Segment"}),
+  #"Replaced value 1" = Table.ReplaceValue(#"Replaced Value", "IA (Vol) State Auto", "PL Segment-IA (Vol) State Auto", Replacer.ReplaceValue, {"Distribution"})
+  in
+    #"Replaced value 1"
