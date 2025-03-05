@@ -1,15 +1,48 @@
-let
-    Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
-    #"Sorted Rows" = Table.Sort(Source,{{"Date modified", Order.Descending}}),
-  Navigation = #"Sorted Rows"{[Name = "2024 Combined Plan.csv", #"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/"]}[Content],
-  #"Imported CSV" = Csv.Document(Navigation, [Delimiter = ",", Columns = 11, QuoteStyle = QuoteStyle.None]),
-  #"Promoted headers" = Table.PromoteHeaders(#"Imported CSV", [PromoteAllScalars = true]),
-  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"Account", type text}, {"Line", type text}, {"Book Date", type datetime}, {"Amount", type number}, {"State", type text}, {"Distribution", type text}, {"Reinsurance", type text}, {"", type text}, {"_1", type text}, {"_2", type text}, {"_3", type text}}),
-  #"Removed other columns" = Table.SelectColumns(#"Changed column type", {"Account", "Line", "Book Date", "Amount", "State", "Distribution", "Reinsurance"}),
-  #"Duplicated Distribution" = Table.DuplicateColumn(#"Removed other columns", "Distribution", "Distribution - Copy"),
-  #"Split Column by Delimiter" = Table.SplitColumn(#"Duplicated Distribution", "Distribution - Copy", Splitter.SplitTextByDelimiter("-", QuoteStyle.Csv), {"Segment", "Channel"}),
-  #"Renaming BME Summary Numerator" = Table.ReplaceValue(#"Split Column by Delimiter", "BME Summary Numerator", "BME Numerator", Replacer.ReplaceText, {"Account"}),
-  #"Renaming BME Summary Denominator" = Table.ReplaceValue(#"Renaming BME Summary Numerator", "BME Summary Denominator", "BME Denominator", Replacer.ReplaceText, {"Account"}),
-  #"Filtered Out PL" = Table.SelectRows(#"Renaming BME Summary Denominator", each Text.StartsWith([Distribution], "Mobility Pod") or Text.StartsWith([Distribution], "Custom") or Text.StartsWith([Distribution], "Energy")or Text.StartsWith([Distribution], "Express") or Text.StartsWith([Distribution], "Farm") or Text.StartsWith([Distribution], "Inland Marine"))
-in
-    #"Filtered Out PL"
+import pandas as pd
+
+# URL to the CSV file (replace this with your file path or URL)
+url = 'https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/2024 Combined Plan.csv'
+
+# Load the CSV data using pandas; make sure to handle large files efficiently
+# You can add additional parameters such as `chunksize` for chunking if needed for very large files
+df = pd.read_csv(url)
+
+# Sort the rows by 'Date modified' in descending order
+df['Date modified'] = pd.to_datetime(df['Date modified'], errors='coerce')  # Ensure 'Date modified' is in datetime format
+df = df.sort_values(by='Date modified', ascending=False)
+
+# Convert 'Book Date' to datetime format
+df['Book Date'] = pd.to_datetime(df['Book Date'], errors='coerce')
+
+# Change column types as needed
+df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
+df['Account'] = df['Account'].astype(str)
+df['Line'] = df['Line'].astype(str)
+df['State'] = df['State'].astype(str)
+df['Distribution'] = df['Distribution'].astype(str)
+df['Reinsurance'] = df['Reinsurance'].astype(str)
+
+# Remove unnecessary columns and keep only the relevant ones
+df = df[['Account', 'Line', 'Book Date', 'Amount', 'State', 'Distribution', 'Reinsurance']]
+
+# Duplicate the 'Distribution' column for further splitting
+df['Distribution - Copy'] = df['Distribution']
+
+# Split the 'Distribution - Copy' column into 'Segment' and 'Channel' based on the delimiter '-'
+df[['Segment', 'Channel']] = df['Distribution - Copy'].str.split('-', expand=True)
+
+# Replace specific values in the 'Account' column
+df['Account'] = df['Account'].replace({
+    'BME Summary Numerator': 'BME Numerator',
+    'BME Summary Denominator': 'BME Denominator'
+})
+
+# Filter rows where 'Distribution' starts with specific strings
+exclude_list = [
+    'Mobility Pod', 'Custom', 'Energy', 'Express', 'Farm', 'Inland Marine'
+]
+df = df[df['Distribution'].str.startswith(tuple(exclude_list))]
+
+# Output the final filtered DataFrame
+print(df)
+
