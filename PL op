@@ -1,18 +1,54 @@
-let
-  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
-  Navigation = Source{[#"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions SC TL/", Name = "SC Metrics - Active Plan - Current Working PBI.csv"]}[Content],
-  #"Imported CSV" = Csv.Document(Navigation, [Delimiter = ",", Columns = 10, Encoding = 65001, QuoteStyle = QuoteStyle.None]),
-  #"Changed Type2" = Table.TransformColumnTypes(#"Imported CSV",{{"Column1", type text}, {"Column2", type text}, {"Column3", type text}, {"Column4", type text}, {"Column5", type text}, {"Column6", type text}, {"Column7", type text}, {"Column8", type text}, {"Column9", type text}, {"Column10", type text}}),
-  #"Promoted Headers" = Table.PromoteHeaders(#"Changed Type2", [PromoteAllScalars=true]),
-  #"Replaced Value" = Table.ReplaceValue(#"Promoted Headers"," - Reinsurance","",Replacer.ReplaceText,{"Line Item"}),
-  #"Renamed Columns1" = Table.RenameColumns(#"Replaced Value",{{"Channel Hierarchy", "Channel"}, {"LOB", "Line"}, {"Line Item", "Account"}, {"State", "States"}, {"Period", "Book Date"},{"Value", "Amount"}}),
-  #"Added State" = Table.AddColumn(#"Renamed Columns1", "State", each if [#"States"] = "State NA" then "State NA" else if [#"States"] = "" then "State NA" else Text.Start([#"States"],2)),
-  #"Added Distribution" = Table.AddColumn(#"Added State", "Distribution", each [#"Segment"] & "-" & [#"Channel"]),
-  #"Added Reinsurance" = Table.AddColumn(#"Added Distribution", "Reinsurance", each if [#"RI Code"] = "" & [SC Reinsurance Code] = "" then "" else if [#"RI Code"] = "" then [SC Reinsurance Code] else if [SC Reinsurance Code] = "" then [#"RI Code"] else "NA"),
-  #"Added Brand" = Table.AddColumn(#"Added Reinsurance", "Brand", each if [Channel] = "IA (Vol) State Auto" then "SA" else "LM"),
-  #"Removed Columns" = Table.RemoveColumns(#"Added Brand", {"RI Code", "States", "SC Reinsurance Code", "DAC Accounts"}),
-  #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns", {{"Book Date", type date}, {"Distribution", type text}, {"Reinsurance", type text}, {"State", type text}, {"Amount", type number}, {"Brand", type text}}),
-  #"Filtered rows 1" = Table.SelectRows(#"Changed Type", each [Book Date] > #date(2024, 12, 31)),
-  #"Filtered rows" = Table.SelectRows(#"Filtered rows 1", each ([Account] <> "NB Policy Count" and [Account] <> "RB Policy Count"))
-in
-  #"Filtered rows"
+import pandas as pd
+
+# Step 1: Read CSV file from SharePoint or local path (Replace with the actual CSV URL or file path)
+url = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions SC TL/SC Metrics - Active Plan - Current Working PBI.csv"
+df = pd.read_csv(url)
+
+# Step 2: Change column types to text (since all columns are treated as text initially in Power Query)
+df = df.astype(str)
+
+# Step 3: Promote Headers (done by default when loading CSV in pandas)
+
+# Step 4: Replace values in 'Line Item' column to remove " - Reinsurance"
+df['Line Item'] = df['Line Item'].replace(" - Reinsurance", "", regex=True)
+
+# Step 5: Rename columns for clarity
+df.rename(columns={
+    'Channel Hierarchy': 'Channel',
+    'LOB': 'Line',
+    'Line Item': 'Account',
+    'State': 'States',
+    'Period': 'Book Date',
+    'Value': 'Amount'
+}, inplace=True)
+
+# Step 6: Add 'State' column derived from 'States' column (apply first 2 characters or 'State NA')
+df['State'] = df['States'].apply(lambda x: 'State NA' if x == 'State NA' or x == '' else x[:2])
+
+# Step 7: Add 'Distribution' column by combining 'Segment' and 'Channel'
+df['Distribution'] = df['Segment'] + '-' + df['Channel']
+
+# Step 8: Add 'Reinsurance' column with conditional logic
+df['Reinsurance'] = df.apply(
+    lambda row: row['SC Reinsurance Code'] if row['RI Code'] == '' else (row['RI Code'] if row['SC Reinsurance Code'] == '' else 'NA'),
+    axis=1
+)
+
+# Step 9: Add 'Brand' column with conditional logic
+df['Brand'] = df['Channel'].apply(lambda x: 'SA' if x == 'IA (Vol) State Auto' else 'LM')
+
+# Step 10: Remove unnecessary columns
+df.drop(columns=['RI Code', 'States', 'SC Reinsurance Code', 'DAC Accounts'], inplace=True)
+
+# Step 11: Convert 'Book Date' to datetime and 'Amount' to numeric
+df['Book Date'] = pd.to_datetime(df['Book Date'], errors='coerce')
+df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
+
+# Step 12: Filter rows where 'Book Date' is after 2024-12-31
+df = df[df['Book Date'] > pd.Timestamp('2024-12-31')]
+
+# Step 13: Filter out rows with 'Account' equal to "NB Policy Count" or "RB Policy Count"
+df = df[~df['Account'].isin(['NB Policy Count', 'RB Policy Count'])]
+
+# Final DataFrame
+print(df.head())  # Or save to a new file, e.g., df.to_csv('output.csv')
