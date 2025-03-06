@@ -1,16 +1,24 @@
-let
-  Source = Table.Combine({#"Fact PL OP Final Plan", #"Fact PL TL Final Plan", #"PL Combined Plan 2024"}),
+import pandas as pd
 
-  #"Filtered out APCAR and Inforce Retention" = Table.SelectRows(Source, each 
-    ([Account] <> "APCAR" and [Account] <> "Inforce Retention")
-  ),
+# Step 1: Load the dataframes (replace with actual data sources)
+df_pl_op = pd.read_csv('Fact_PL_OP_Final_Plan.csv')  # Replace with actual file or data source
+df_pl_tl = pd.read_csv('Fact_PL_TL_Final_Plan.csv')  # Replace with actual file or data source
+df_pl_combined = pd.read_csv('PL_Combined_Plan_2024.csv')  # Replace with actual file or data source
 
-  #"Filtered out SA & D0GRM" = Table.SelectRows(#"Filtered out APCAR and Inforce Retention", each 
-    ([Distribution] <> "D0GRM") and  
-    not Text.Contains([Distribution], "IA (Vol) State Auto")
-  ),
+# Step 2: Combine the dataframes
+df_combined = pd.concat([df_pl_op, df_pl_tl, df_pl_combined], ignore_index=True)
 
-  #"Changed column type" = Table.TransformColumnTypes(#"Filtered out SA & D0GRM", {{"Book Date", type date}})
-  
-in
-  #"Changed column type"
+# Step 3: Filter out "APCAR" and "Inforce Retention" from the "Account" column
+df_filtered_apcar_retention = df_combined[~df_combined['Account'].isin(['APCAR', 'Inforce Retention'])]
+
+# Step 4: Filter out "D0GRM" and any rows where "Distribution" contains "IA (Vol) State Auto"
+df_filtered = df_filtered_apcar_retention[
+    (~df_filtered_apcar_retention['Distribution'].isin(['D0GRM'])) & 
+    (~df_filtered_apcar_retention['Distribution'].str.contains('IA (Vol) State Auto'))
+]
+
+# Step 5: Convert "Book Date" to datetime format
+df_filtered['Book Date'] = pd.to_datetime(df_filtered['Book Date'], errors='coerce')
+
+# Final DataFrame
+print(df_filtered.head())  # Or save the filtered dataframe to a new CSV or file
