@@ -44,4 +44,53 @@ df['Distribution'] = df.apply(get_distribution, axis=1)
 # Step 8: Add 'Account' column with conditions
 df['Account'] = df.apply(
     lambda row: "" if row['Line Item'] == "" and row['DAC Accounts'] == "" 
-    else (row['Line Item'] + " - " + row['DAC 
+    else (row['Line Item'] + " - " + row['DAC Accounts']) if row['DAC Accounts'] != "" 
+    else row['Line Item'], axis=1
+)
+
+# Step 9: Add 'Reinsurance' column with conditions
+def get_reinsurance(row):
+    if row['RI Code'] == "" and row['Account'] in ["DAC Amortization", "DAC Capitalization"]:
+        return "GP"
+    elif row['RI Code'] == "RI Direct":
+        return "Direct"
+    elif row['Account'] == "RI-Non CUNA Earned Premium - Assumed":
+        return "Assumed"
+    elif row['Account'] == "RI-Non CUNA Earned Premium - Ceded":
+        return "Ceded"
+    elif row['RI Code'] != "":
+        return row['RI Code']
+    else:
+        return "Direct"
+
+df['Reinsurance'] = df.apply(get_reinsurance, axis=1)
+
+# Step 10: Remove unnecessary columns
+df.drop(columns=['Line Item', 'RI Code', 'DAC Accounts', 'States'], inplace=True)
+
+# Step 11: Rename 'Brand Hierarchy' column to 'Brand'
+df.rename(columns={'Brand Hierarchy': 'Brand'}, inplace=True)
+
+# Step 12: Convert text columns to string type for consistency
+df['State'] = df['State'].astype(str)
+df['Distribution'] = df['Distribution'].astype(str)
+df['Reinsurance'] = df['Reinsurance'].astype(str)
+df['Account'] = df['Account'].astype(str)
+
+# Step 13: Replace missing Segment values with "PL Segment"
+df['Segment'].replace("", "PL Segment", inplace=True)
+
+# Step 14: Standardize Distribution naming
+df['Distribution'].replace("IA (Vol) State Auto", "PL Segment-IA (Vol) State Auto", inplace=True)
+
+# Step 15: Filter rows where 'Book Date' is greater than 2024-12-31
+df = df[df['Book Date'] > pd.Timestamp('2024-12-31')]
+
+# Step 16: Select final columns for output
+df = df[['Account', 'Line', 'Brand', 'Book Date', 'Amount', 'State', 'Distribution', 'Reinsurance']]
+
+# Step 17: Replace " - SA" in Account column
+df['Account'] = df['Account'].str.replace(" - SA", "", regex=False)
+
+# Final DataFrame
+print(df.head())  # Or save to a new file, e.g., df.to_csv('output.csv')
