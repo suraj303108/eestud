@@ -1,24 +1,7 @@
-import pandas as pd
-
-# Step 1: Load the dataframes (replace with actual data sources)
-df_pl_op = pd.read_csv('Fact_PL_OP_Final_Plan.csv')  # Replace with actual file or data source
-df_pl_tl = pd.read_csv('Fact_PL_TL_Final_Plan.csv')  # Replace with actual file or data source
-df_pl_combined = pd.read_csv('PL_Combined_Plan_2024.csv')  # Replace with actual file or data source
-
-# Step 2: Combine the dataframes
-df_combined = pd.concat([df_pl_op, df_pl_tl, df_pl_combined], ignore_index=True)
-
-# Step 3: Filter out "APCAR" and "Inforce Retention" from the "Account" column
-df_filtered_apcar_retention = df_combined[~df_combined['Account'].isin(['APCAR', 'Inforce Retention'])]
-
-# Step 4: Filter out "D0GRM" and any rows where "Distribution" contains "IA (Vol) State Auto"
-df_filtered = df_filtered_apcar_retention[
-    (~df_filtered_apcar_retention['Distribution'].isin(['D0GRM'])) & 
-    (~df_filtered_apcar_retention['Distribution'].str.contains('IA (Vol) State Auto'))
-]
-
-# Step 5: Convert "Book Date" to datetime format
-df_filtered['Book Date'] = pd.to_datetime(df_filtered['Book Date'], errors='coerce')
-
-# Final DataFrame
-print(df_filtered.head())  # Or save the filtered dataframe to a new CSV or file
+let
+  Source = Table.Combine({#"Fact SC TL Final Plan", #"Fact SC OP Final Plan", #"SC Combined Plan 2024"}),
+  #"Changed column type" = Table.TransformColumnTypes(Source, {{"Book Date", type date}}),
+    #"Replaced Value" = Table.ReplaceValue(#"Changed column type","Simple BOP Liability","BOP Liability",Replacer.ReplaceText,{"Line"}),
+    #"Replaced Value1" = Table.ReplaceValue(#"Replaced Value","Simple BOP Property","BOP Property",Replacer.ReplaceText,{"Line"})
+in
+    #"Replaced Value1"
