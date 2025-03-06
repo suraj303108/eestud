@@ -1,54 +1,16 @@
-import pandas as pd
+let
+  Source = Table.Combine({#"Fact PL OP Final Plan", #"Fact PL TL Final Plan", #"PL Combined Plan 2024"}),
 
-# Step 1: Read CSV file from SharePoint or local path (Replace with the actual CSV URL or file path)
-url = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions SC TL/SC Metrics - Active Plan - Current Working PBI.csv"
-df = pd.read_csv(url)
+  #"Filtered out APCAR and Inforce Retention" = Table.SelectRows(Source, each 
+    ([Account] <> "APCAR" and [Account] <> "Inforce Retention")
+  ),
 
-# Step 2: Change column types to text (since all columns are treated as text initially in Power Query)
-df = df.astype(str)
+  #"Filtered out SA & D0GRM" = Table.SelectRows(#"Filtered out APCAR and Inforce Retention", each 
+    ([Distribution] <> "D0GRM") and  
+    not Text.Contains([Distribution], "IA (Vol) State Auto")
+  ),
 
-# Step 3: Promote Headers (done by default when loading CSV in pandas)
-
-# Step 4: Replace values in 'Line Item' column to remove " - Reinsurance"
-df['Line Item'] = df['Line Item'].replace(" - Reinsurance", "", regex=True)
-
-# Step 5: Rename columns for clarity
-df.rename(columns={
-    'Channel Hierarchy': 'Channel',
-    'LOB': 'Line',
-    'Line Item': 'Account',
-    'State': 'States',
-    'Period': 'Book Date',
-    'Value': 'Amount'
-}, inplace=True)
-
-# Step 6: Add 'State' column derived from 'States' column (apply first 2 characters or 'State NA')
-df['State'] = df['States'].apply(lambda x: 'State NA' if x == 'State NA' or x == '' else x[:2])
-
-# Step 7: Add 'Distribution' column by combining 'Segment' and 'Channel'
-df['Distribution'] = df['Segment'] + '-' + df['Channel']
-
-# Step 8: Add 'Reinsurance' column with conditional logic
-df['Reinsurance'] = df.apply(
-    lambda row: row['SC Reinsurance Code'] if row['RI Code'] == '' else (row['RI Code'] if row['SC Reinsurance Code'] == '' else 'NA'),
-    axis=1
-)
-
-# Step 9: Add 'Brand' column with conditional logic
-df['Brand'] = df['Channel'].apply(lambda x: 'SA' if x == 'IA (Vol) State Auto' else 'LM')
-
-# Step 10: Remove unnecessary columns
-df.drop(columns=['RI Code', 'States', 'SC Reinsurance Code', 'DAC Accounts'], inplace=True)
-
-# Step 11: Convert 'Book Date' to datetime and 'Amount' to numeric
-df['Book Date'] = pd.to_datetime(df['Book Date'], errors='coerce')
-df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
-
-# Step 12: Filter rows where 'Book Date' is after 2024-12-31
-df = df[df['Book Date'] > pd.Timestamp('2024-12-31')]
-
-# Step 13: Filter out rows with 'Account' equal to "NB Policy Count" or "RB Policy Count"
-df = df[~df['Account'].isin(['NB Policy Count', 'RB Policy Count'])]
-
-# Final DataFrame
-print(df.head())  # Or save to a new file, e.g., df.to_csv('output.csv')
+  #"Changed column type" = Table.TransformColumnTypes(#"Filtered out SA & D0GRM", {{"Book Date", type date}})
+  
+in
+  #"Changed column type"
