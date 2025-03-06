@@ -1,48 +1,32 @@
-import pandas as pd
+let
+    Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
+    Navigation = Source{[#"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions PL OP/", Name = "PL Ops Metrics Export - Current What If PBI.csv"]}[Content],
+    #"Imported CSV" = Csv.Document(Navigation, [Delimiter = ",", Columns = 7, Encoding = 65001, QuoteStyle = QuoteStyle.None]),
+    #"Changed Type" = Table.TransformColumnTypes(#"Imported CSV",{{"Column1", type text}, {"Column2", type text}, {"Column3", type text}, {"Column4", type text}, {"Column5", type text}, {"Column6", type text}, {"Column7", type text}}),
+    #"Promoted Headers" = Table.PromoteHeaders(#"Changed Type", [PromoteAllScalars=true]),
+    #"Replaced Value" = Table.ReplaceValue(#"Promoted Headers","State N/A","State NA",Replacer.ReplaceText,{"SS_States: US States"}),
+    #"Added State" = Table.AddColumn(#"Replaced Value", "State", each if [#"SS_States: US States"] = "State NA" then "State NA" else if [#"SS_States: US States"] = "" then "State NA" else Text.Start([#"SS_States: US States"],2)),
+    #"Added Distribution" = Table.TransformColumnTypes(
+        Table.AddColumn(#"Added State", "Distribution", each 
+            if [Brand] = "LM" then  
+                if [#"Channel"] = "Platform" then "LM Platform" 
+                else [#"Channel"] 
+            else [#"Channel"]
+        ), {{"Distribution", type text}}
+    ),
+    #"Added Reinsurance" = Table.TransformColumnTypes(Table.AddColumn(#"Added Distribution", "Reinsurance", each "Direct"), {{"Reinsurance", type text}}),
+    #"Added Segment" = Table.TransformColumnTypes(Table.AddColumn(#"Added Reinsurance", "Segment", each "PL Segment"), {{"Segment", type text}}),
+    #"Renamed Columns" = Table.RenameColumns(#"Added Segment",{{"SS_LOB: Export Metric", "Line"}, {"Line Item", "Account"}}),
+    #"Removed US States" = Table.RemoveColumns(#"Renamed Columns",{"SS_States: US States"}),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Removed US States",{{"State", type text}, {"Value", type number}, {"Period", type date}}),
+    #"Filtered rows" = Table.SelectRows(#"Changed Type1", each [Period] > #date(2024, 12, 31)),
 
-# URL to the CSV file (replace this with your file path or URL)
-url = 'https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/2024 Combined Plan.csv'
+    // Filtering logic to exclude "Flood" and "Other" unless Account is "NB Premium" or "RB Premium"
+    #"Filtered out Flood and Other based on Account" = Table.SelectRows(#"Filtered rows", each 
+        not ([Line] = "Flood" or [Line] = "Other") or  // Allow all other lines
+        ([Account] = "NB Written Premium" or [Account] = "RB Written Premium") // Allow Flood & Other only for these accounts
+    ),
 
-# Load the CSV data using pandas; make sure to handle large files efficiently
-# You can add additional parameters such as `chunksize` for chunking if needed for very large files
-df = pd.read_csv(url)
-
-# Sort the rows by 'Date modified' in descending order
-df['Date modified'] = pd.to_datetime(df['Date modified'], errors='coerce')  # Ensure 'Date modified' is in datetime format
-df = df.sort_values(by='Date modified', ascending=False)
-
-# Convert 'Book Date' to datetime format
-df['Book Date'] = pd.to_datetime(df['Book Date'], errors='coerce')
-
-# Change column types as needed
-df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
-df['Account'] = df['Account'].astype(str)
-df['Line'] = df['Line'].astype(str)
-df['State'] = df['State'].astype(str)
-df['Distribution'] = df['Distribution'].astype(str)
-df['Reinsurance'] = df['Reinsurance'].astype(str)
-
-# Remove unnecessary columns and keep only the relevant ones
-df = df[['Account', 'Line', 'Book Date', 'Amount', 'State', 'Distribution', 'Reinsurance']]
-
-# Duplicate the 'Distribution' column for further splitting
-df['Distribution - Copy'] = df['Distribution']
-
-# Split the 'Distribution - Copy' column into 'Segment' and 'Channel' based on the delimiter '-'
-df[['Segment', 'Channel']] = df['Distribution - Copy'].str.split('-', expand=True)
-
-# Replace specific values in the 'Account' column
-df['Account'] = df['Account'].replace({
-    'BME Summary Numerator': 'BME Numerator',
-    'BME Summary Denominator': 'BME Denominator'
-})
-
-# Filter rows where 'Distribution' starts with specific strings
-exclude_list = [
-    'Mobility Pod', 'Custom', 'Energy', 'Express', 'Farm', 'Inland Marine'
-]
-df = df[df['Distribution'].str.startswith(tuple(exclude_list))]
-
-# Output the final filtered DataFrame
-print(df)
-
+    #"Renamed Columns1" = Table.RenameColumns(#"Filtered out Flood and Other based on Account", {{"Value", "Amount"}, {"Period", "Book Date"}})
+in
+    #"Renamed Columns1"
