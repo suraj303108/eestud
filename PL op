@@ -1,47 +1,110 @@
-import pandas as pd
+let
+    // Load Source Data from SharePoint
+    Source = SharePoint.Files(
+        "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", 
+        [ApiVersion = 15]
+    ),
+    Navigation = Source{[
+        #"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions PL TL/", 
+        Name = "PL Metrics - Active Plan - Current Working PBI.csv"
+    ]}[Content],
 
-# Step 1: Read CSV file from the SharePoint or local path
-url = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions PL OP/PL Ops Metrics Export - Current What If PBI.csv"
-df = pd.read_csv(url)
+    // Import and Promote Headers
+    #"Imported CSV" = Csv.Document(Navigation, [
+        Delimiter = ",", 
+        Columns = 10, 
+        Encoding = 65001, 
+        QuoteStyle = QuoteStyle.None
+    ]),
+    #"Promoted Headers" = Table.PromoteHeaders(#"Imported CSV", [PromoteAllScalars = true]),
 
-# Step 2: Replace 'State N/A' with 'State NA' in 'SS_States: US States' column
-df['SS_States: US States'] = df['SS_States: US States'].replace('State N/A', 'State NA')
+    // Rename Columns for Clarity
+    #"Renamed Columns1" = Table.RenameColumns(#"Promoted Headers", {{"Segment: PL", "Segment"}}),
 
-# Step 3: Add 'State' column with conditions
-df['State'] = df['SS_States: US States'].apply(lambda x: 'State NA' if x in ['State NA', ''] else str(x)[:2])
+    // Convert Data Types
+    #"Changed Type" = Table.TransformColumnTypes(#"Renamed Columns1", {
+        {"Value", type number}, 
+        {"Period", type date}
+    }),
 
-# Step 4: Add 'Distribution' column with conditions based on 'Brand' and 'Channel'
-df['Distribution'] = df.apply(
-    lambda row: 'LM Platform' if row['Brand'] == 'LM' and row['Channel'] == 'Platform' 
-    else row['Channel'], axis=1
-)
+    // Rename Columns for Consistency
+    #"Renamed Columns" = Table.RenameColumns(#"Changed Type", {{"LOB", "Line"}, {"Channel Hierarchy", "Channel"}, {"State", "States"}, {"Value", "Amount"}, {"Period", "Book Date"}}),
 
-# Step 5: Add 'Reinsurance' column with constant value 'Direct'
-df['Reinsurance'] = 'Direct'
+    // Trim Leading/Trailing Spaces in Line Item Column
+    #"Trimmed Line Item" = Table.TransformColumns(#"Renamed Columns", {
+        {"Line Item", each Text.Trim(_), type nullable text}
+    }),
 
-# Step 6: Add 'Segment' column with constant value 'PL Segment'
-df['Segment'] = 'PL Segment'
+    // Add Derived Column: State Code (First 2 Letters of State)
+    #"Added State" = Table.AddColumn(#"Trimmed Line Item", "State", each 
+        if [#"States"] = "State NA" or [#"States"] = "" then "State NA" 
+        else Text.Start([#"States"], 2)
+    ),
 
-# Step 7: Rename columns as required
-df = df.rename(columns={'SS_LOB: Export Metric': 'Line', 'Line Item': 'Account'})
+    // Add Derived Column: Distribution
+    #"Added Distribution" = Table.AddColumn(#"Added State", "Distribution", 
+    each if [Brand Hierarchy] = "LM" and [Channel] = "Platform" then 
+        "LM Platform" 
+    else if [Segment] = "PL Segment" and [Channel] = "No_Channel" then 
+        [Segment] & "-" & [Brand Hierarchy] & [Channel] 
+    else if [Segment] = "" and [Channel] = "No_Channel" then 
+        "PL Segment-" & [Brand Hierarchy] & [Channel] 
+    else if [Segment] = "" then 
+        [Channel] 
+    else 
+        [Segment] & "-" & [Channel]
+    ),
 
-# Step 8: Drop 'SS_States: US States' column
-df = df.drop(columns=['SS_States: US States'])
+    // Add Derived Column: Account Name
+    #"Added Account" = Table.AddColumn(#"Added Distribution", "Account", each 
+        if [Line Item] = "" and [DAC Accounts] = "" then "" 
+        else if [DAC Accounts] <> "" then [Line Item] & " - " & [DAC Accounts] 
+        else [Line Item]
+    ),
 
-# Step 9: Change data types as necessary
-df['State'] = df['State'].astype(str)
-df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
-df['Period'] = pd.to_datetime(df['Period'], errors='coerce')
+    // Add Derived Column: Reinsurance Type
+    #"Added Reinsurance" = Table.AddColumn(#"Added Account", "Reinsurance", each 
+        if ([RI Code] = "" and ([Account] = "DAC Amortization" or [Account] = "DAC Capitalization")) then 
+            "GP" 
+        else if [RI Code] = "RI Direct" then 
+            "Direct" 
+        else if [Account] = "RI-Non CUNA Earned Premium - Assumed" then 
+            "Assumed" 
+        else if [Account] = "RI-Non CUNA Earned Premium - Ceded" then 
+            "Ceded" 
+        else if [RI Code] <> "" then 
+            [RI Code] 
+        else 
+            "Direct"
+    ),
 
-# Step 10: Filter rows where 'Period' is after 2024-12-31
-df = df[df['Period'] > pd.Timestamp('2024-12-31')]
+    // Remove Unnecessary Columns
+    #"Removed Columns3" = Table.RemoveColumns(#"Added Reinsurance", {
+        "Line Item", "RI Code", "DAC Accounts", "States"
+    }),
+  #"Renamed columns 1" = Table.RenameColumns(#"Removed Columns3", {{"Brand Hierarchy", "Brand"}}),
 
-# Step 11: Filter out "Flood" and "Other" lines based on Account condition
-df = df[~((df['Line'].isin(['Flood', 'Other'])) & 
-          ~df['Account'].isin(['NB Written Premium', 'RB Written Premium']))]
+    // Convert Data Types for Consistency
+    #"Changed Type1" = Table.TransformColumnTypes(#"Renamed columns 1", {
+        {"State", type text}, 
+        {"Distribution", type text}, 
+        {"Reinsurance", type text}, 
+        {"Account", type text}
+    }),
 
-# Step 12: Rename final columns
-df = df.rename(columns={'Value': 'Amount', 'Period': 'Book Date'})
+    // Replace Missing Segment Values with "PL Segment"
+    #"Replaced Value" = Table.ReplaceValue(#"Changed Type1", "", "PL Segment", Replacer.ReplaceValue, {"Segment"}),
 
-# Final DataFrame
-print(df.head())  # Or save to a new file
+    // Standardize Distribution Naming
+    #"Replaced Value1" = Table.ReplaceValue(#"Replaced Value", "IA (Vol) State Auto", "PL Segment-IA (Vol) State Auto", Replacer.ReplaceValue, {"Distribution"}),
+
+    // *Filter Out "Written Premium" Unless Distribution is "PL Segment-IA (Vol) State Auto"*
+    #"Filtered Rows" = Table.SelectRows(#"Replaced Value1", each [Book Date] > #date(2024, 12, 31)),
+
+    // Select Final Columns for Output
+    #"Choose columns" = Table.SelectColumns(#"Filtered Rows", {
+        "Account", "Line", "Brand", "Book Date", "Amount", "State", "Distribution", "Reinsurance"
+    }),
+  #"Replaced value 1" = Table.ReplaceValue(#"Choose columns", " - SA", "", Replacer.ReplaceText, {"Account"})
+in
+    #"Replaced value 1"
