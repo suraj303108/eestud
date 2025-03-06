@@ -1,96 +1,19 @@
-import pandas as pd
-
-# Step 1: Read CSV file from SharePoint or local path
-url = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions PL TL/PL Metrics - Active Plan - Current Working PBI.csv"
-df = pd.read_csv(url)
-
-# Step 2: Rename columns for clarity
-df.rename(columns={'Segment: PL': 'Segment'}, inplace=True)
-
-# Step 3: Convert data types
-df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
-df['Period'] = pd.to_datetime(df['Period'], errors='coerce')
-
-# Step 4: Rename columns for consistency
-df.rename(columns={
-    'LOB': 'Line',
-    'Channel Hierarchy': 'Channel',
-    'State': 'States',
-    'Value': 'Amount',
-    'Period': 'Book Date'
-}, inplace=True)
-
-# Step 5: Trim leading/trailing spaces in 'Line Item' column
-df['Line Item'] = df['Line Item'].str.strip()
-
-# Step 6: Add 'State' column derived from 'States'
-df['State'] = df['States'].apply(lambda x: 'State NA' if x in ['State NA', ''] else str(x)[:2])
-
-# Step 7: Add 'Distribution' column with conditions
-def get_distribution(row):
-    if row['Brand Hierarchy'] == "LM" and row['Channel'] == "Platform":
-        return "LM Platform"
-    elif row['Segment'] == "PL Segment" and row['Channel'] == "No_Channel":
-        return f"{row['Segment']}-{row['Brand Hierarchy']}{row['Channel']}"
-    elif row['Segment'] == "" and row['Channel'] == "No_Channel":
-        return f"PL Segment-{row['Brand Hierarchy']}{row['Channel']}"
-    elif row['Segment'] == "":
-        return row['Channel']
-    else:
-        return f"{row['Segment']}-{row['Channel']}"
-
-df['Distribution'] = df.apply(get_distribution, axis=1)
-
-# Step 8: Add 'Account' column with conditions
-df['Account'] = df.apply(
-    lambda row: "" if row['Line Item'] == "" and row['DAC Accounts'] == "" 
-    else (row['Line Item'] + " - " + row['DAC Accounts']) if row['DAC Accounts'] != "" 
-    else row['Line Item'], axis=1
-)
-
-# Step 9: Add 'Reinsurance' column with conditions
-def get_reinsurance(row):
-    if row['RI Code'] == "" and row['Account'] in ["DAC Amortization", "DAC Capitalization"]:
-        return "GP"
-    elif row['RI Code'] == "RI Direct":
-        return "Direct"
-    elif row['Account'] == "RI-Non CUNA Earned Premium - Assumed":
-        return "Assumed"
-    elif row['Account'] == "RI-Non CUNA Earned Premium - Ceded":
-        return "Ceded"
-    elif row['RI Code'] != "":
-        return row['RI Code']
-    else:
-        return "Direct"
-
-df['Reinsurance'] = df.apply(get_reinsurance, axis=1)
-
-# Step 10: Remove unnecessary columns
-df.drop(columns=['Line Item', 'RI Code', 'DAC Accounts', 'States'], inplace=True)
-
-# Step 11: Rename 'Brand Hierarchy' column to 'Brand'
-df.rename(columns={'Brand Hierarchy': 'Brand'}, inplace=True)
-
-# Step 12: Convert text columns to string type for consistency
-df['State'] = df['State'].astype(str)
-df['Distribution'] = df['Distribution'].astype(str)
-df['Reinsurance'] = df['Reinsurance'].astype(str)
-df['Account'] = df['Account'].astype(str)
-
-# Step 13: Replace missing Segment values with "PL Segment"
-df['Segment'].replace("", "PL Segment", inplace=True)
-
-# Step 14: Standardize Distribution naming
-df['Distribution'].replace("IA (Vol) State Auto", "PL Segment-IA (Vol) State Auto", inplace=True)
-
-# Step 15: Filter rows where 'Book Date' is greater than 2024-12-31
-df = df[df['Book Date'] > pd.Timestamp('2024-12-31')]
-
-# Step 16: Select final columns for output
-df = df[['Account', 'Line', 'Brand', 'Book Date', 'Amount', 'State', 'Distribution', 'Reinsurance']]
-
-# Step 17: Replace " - SA" in Account column
-df['Account'] = df['Account'].str.replace(" - SA", "", regex=False)
-
-# Final DataFrame
-print(df.head())  # Or save to a new file, e.g., df.to_csv('output.csv')
+let
+  Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
+  Navigation = Source{[#"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions SC OP/", Name = "SC Op Metrics Export - Current What If PBI.csv"]}[Content],
+  #"Imported CSV" = Csv.Document(Navigation, [Delimiter = ",", Columns = 7, Encoding = 65001, QuoteStyle = QuoteStyle.None]),
+  #"Promoted Headers" = Table.PromoteHeaders(#"Imported CSV", [PromoteAllScalars=true]),
+  #"Renamed Columns" = Table.RenameColumns(#"Promoted Headers",{{"Line Item", "Account"}, {"SS: Segment: BL", "Segment"}, {"SS_LOB: BL Topline", "Line"}, {"SS_Channel: BL", "Channel"}, {"SS_States: US States Reporting", "States"}, {"Value", "Amount"}, {"Period", "Book Date"}}),
+  #"Added State" = Table.AddColumn(#"Renamed Columns", "State", each if [#"States"] = "" then "State NA" else Text.Start([#"States"], 2)),
+  #"Added Distribution" = Table.AddColumn(#"Added State", "Distribution", each [#"Segment"] & "-" & [#"Channel"]),
+  #"Added Reinsurance" = Table.AddColumn(#"Added Distribution", "Reinsurance", each "RI_NA"),
+  #"Added Brand" = Table.AddColumn(#"Added Reinsurance", "Brand", each if [Channel] = "IA (Vol) State Auto" then "SA" else "LM"),
+  #"Removed Columns3" = Table.RemoveColumns(#"Added Brand", {"States"}),
+  #"Changed Type1" = Table.TransformColumnTypes(#"Removed Columns3",{{"State", type text}, {"Distribution", type text}, {"Reinsurance", type text}, {"Brand", type text}, {"Book Date", type date}, {"Amount", type number}}),
+  #"Renaming NB Rate Numerator value" = Table.ReplaceValue(#"Changed Type1", "NB Summary Num: Final Rate", "NB Rate Numerator", Replacer.ReplaceText, {"Account"}),
+  #"Renaming RB Rate Numerator value" = Table.ReplaceValue(#"Renaming NB Rate Numerator value", "RB Summary Num: Final Rate", "RB Rate Numerator", Replacer.ReplaceText, {"Account"}),
+  #"Renaming NB Rate Denominator value" = Table.ReplaceValue(#"Renaming RB Rate Numerator value", "NB Summary Denom: Final Rate", "NB Rate Denominator", Replacer.ReplaceText, {"Account"}),
+  #"Renaming RB Rate Denominator value" = Table.ReplaceValue(#"Renaming NB Rate Denominator value", "RB Summary Denom: Final Rate", "RB Rate Denominator", Replacer.ReplaceText, {"Account"}),
+  #"Filtered rows 1" = Table.SelectRows(#"Renaming RB Rate Denominator value", each [Book Date] > #date(2024, 12, 31))
+in
+  #"Filtered rows 1"
