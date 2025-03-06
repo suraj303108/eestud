@@ -1,3 +1,23 @@
+import pandas as pd
+
+# Step 1: Load the dataframes (replace with actual data sources)
+df_sc_op = pd.read_csv('Fact_SC_OP_Final_Plan.csv')  # Replace with actual file or data source
+df_pl_tl = pd.read_csv('Fact_PL_TL_Final_Plan.csv')  # Replace with actual file or data source
+df_pl_op = pd.read_csv('Fact_PL_OP_Final_Plan.csv')  # Replace with actual file or data source
+df_sc_tl = pd.read_csv('Fact_SC_TL_Final_Plan.csv')  # Replace with actual file or data source
+df_combined = pd.read_csv('Combined_Plan_upto_2024.csv')  # Replace with actual file or data source
+
+# Step 2: Combine the dataframes
+df_combined_plans = pd.concat([df_sc_op, df_pl_tl, df_pl_op, df_sc_tl, df_combined], ignore_index=True)
+
+# Step 3: Remove specific columns: "Segment", "Channel", and "Brand"
+df_combined_plans = df_combined_plans.drop(columns=["Segment", "Channel", "Brand"], errors='ignore')
+
+# Step 4: Change the column type for "Book Date" to datetime
+df_combined_plans['Book Date'] = pd.to_datetime(df_combined_plans['Book Date'], errors='coerce')
+
+# Final DataFrame
+print(df_combined_plans.head())  # Or save the modified dataframe to a new CSV or file
 let
   Source = Table.Combine({#"Fact SC OP Final Plan", #"Fact PL TL Final Plan", #"Fact PL OP Final Plan", #"Fact SC TL Final Plan", #"Combined Plan upto 2024"}),
   #"Removed columns" = Table.RemoveColumns(Source, {"Segment", "Channel", "Brand"}),
