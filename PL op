@@ -1,32 +1,47 @@
-let
-    Source = SharePoint.Files("https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy", [ApiVersion = 15]),
-    Navigation = Source{[#"Folder Path" = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions PL OP/", Name = "PL Ops Metrics Export - Current What If PBI.csv"]}[Content],
-    #"Imported CSV" = Csv.Document(Navigation, [Delimiter = ",", Columns = 7, Encoding = 65001, QuoteStyle = QuoteStyle.None]),
-    #"Changed Type" = Table.TransformColumnTypes(#"Imported CSV",{{"Column1", type text}, {"Column2", type text}, {"Column3", type text}, {"Column4", type text}, {"Column5", type text}, {"Column6", type text}, {"Column7", type text}}),
-    #"Promoted Headers" = Table.PromoteHeaders(#"Changed Type", [PromoteAllScalars=true]),
-    #"Replaced Value" = Table.ReplaceValue(#"Promoted Headers","State N/A","State NA",Replacer.ReplaceText,{"SS_States: US States"}),
-    #"Added State" = Table.AddColumn(#"Replaced Value", "State", each if [#"SS_States: US States"] = "State NA" then "State NA" else if [#"SS_States: US States"] = "" then "State NA" else Text.Start([#"SS_States: US States"],2)),
-    #"Added Distribution" = Table.TransformColumnTypes(
-        Table.AddColumn(#"Added State", "Distribution", each 
-            if [Brand] = "LM" then  
-                if [#"Channel"] = "Platform" then "LM Platform" 
-                else [#"Channel"] 
-            else [#"Channel"]
-        ), {{"Distribution", type text}}
-    ),
-    #"Added Reinsurance" = Table.TransformColumnTypes(Table.AddColumn(#"Added Distribution", "Reinsurance", each "Direct"), {{"Reinsurance", type text}}),
-    #"Added Segment" = Table.TransformColumnTypes(Table.AddColumn(#"Added Reinsurance", "Segment", each "PL Segment"), {{"Segment", type text}}),
-    #"Renamed Columns" = Table.RenameColumns(#"Added Segment",{{"SS_LOB: Export Metric", "Line"}, {"Line Item", "Account"}}),
-    #"Removed US States" = Table.RemoveColumns(#"Renamed Columns",{"SS_States: US States"}),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Removed US States",{{"State", type text}, {"Value", type number}, {"Period", type date}}),
-    #"Filtered rows" = Table.SelectRows(#"Changed Type1", each [Period] > #date(2024, 12, 31)),
+import pandas as pd
 
-    // Filtering logic to exclude "Flood" and "Other" unless Account is "NB Premium" or "RB Premium"
-    #"Filtered out Flood and Other based on Account" = Table.SelectRows(#"Filtered rows", each 
-        not ([Line] = "Flood" or [Line] = "Other") or  // Allow all other lines
-        ([Account] = "NB Written Premium" or [Account] = "RB Written Premium") // Allow Flood & Other only for these accounts
-    ),
+# Step 1: Read CSV file from the SharePoint or local path
+url = "https://libertymutual.sharepoint.com/sites/GRMFSDataStrategy/Shared Documents/General/Final Plan/USRM Versions PL OP/PL Ops Metrics Export - Current What If PBI.csv"
+df = pd.read_csv(url)
 
-    #"Renamed Columns1" = Table.RenameColumns(#"Filtered out Flood and Other based on Account", {{"Value", "Amount"}, {"Period", "Book Date"}})
-in
-    #"Renamed Columns1"
+# Step 2: Replace 'State N/A' with 'State NA' in 'SS_States: US States' column
+df['SS_States: US States'] = df['SS_States: US States'].replace('State N/A', 'State NA')
+
+# Step 3: Add 'State' column with conditions
+df['State'] = df['SS_States: US States'].apply(lambda x: 'State NA' if x in ['State NA', ''] else str(x)[:2])
+
+# Step 4: Add 'Distribution' column with conditions based on 'Brand' and 'Channel'
+df['Distribution'] = df.apply(
+    lambda row: 'LM Platform' if row['Brand'] == 'LM' and row['Channel'] == 'Platform' 
+    else row['Channel'], axis=1
+)
+
+# Step 5: Add 'Reinsurance' column with constant value 'Direct'
+df['Reinsurance'] = 'Direct'
+
+# Step 6: Add 'Segment' column with constant value 'PL Segment'
+df['Segment'] = 'PL Segment'
+
+# Step 7: Rename columns as required
+df = df.rename(columns={'SS_LOB: Export Metric': 'Line', 'Line Item': 'Account'})
+
+# Step 8: Drop 'SS_States: US States' column
+df = df.drop(columns=['SS_States: US States'])
+
+# Step 9: Change data types as necessary
+df['State'] = df['State'].astype(str)
+df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
+df['Period'] = pd.to_datetime(df['Period'], errors='coerce')
+
+# Step 10: Filter rows where 'Period' is after 2024-12-31
+df = df[df['Period'] > pd.Timestamp('2024-12-31')]
+
+# Step 11: Filter out "Flood" and "Other" lines based on Account condition
+df = df[~((df['Line'].isin(['Flood', 'Other'])) & 
+          ~df['Account'].isin(['NB Written Premium', 'RB Written Premium']))]
+
+# Step 12: Rename final columns
+df = df.rename(columns={'Value': 'Amount', 'Period': 'Book Date'})
+
+# Final DataFrame
+print(df.head())  # Or save to a new file
