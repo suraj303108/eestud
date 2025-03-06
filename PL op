@@ -1,7 +1,21 @@
-let
-  Source = Table.Combine({#"Fact SC TL Final Plan", #"Fact SC OP Final Plan", #"SC Combined Plan 2024"}),
-  #"Changed column type" = Table.TransformColumnTypes(Source, {{"Book Date", type date}}),
-    #"Replaced Value" = Table.ReplaceValue(#"Changed column type","Simple BOP Liability","BOP Liability",Replacer.ReplaceText,{"Line"}),
-    #"Replaced Value1" = Table.ReplaceValue(#"Replaced Value","Simple BOP Property","BOP Property",Replacer.ReplaceText,{"Line"})
-in
-    #"Replaced Value1"
+import pandas as pd
+
+# Step 1: Load the dataframes (replace with actual data sources)
+df_sc_tl = pd.read_csv('Fact_SC_TL_Final_Plan.csv')  # Replace with actual file or data source
+df_sc_op = pd.read_csv('Fact_SC_OP_Final_Plan.csv')  # Replace with actual file or data source
+df_combined = pd.read_csv('SC_Combined_Plan_2024.csv')  # Replace with actual file or data source
+
+# Step 2: Combine the dataframes
+df_combined_plans = pd.concat([df_sc_tl, df_sc_op, df_combined], ignore_index=True)
+
+# Step 3: Change the column type for "Book Date" to datetime
+df_combined_plans['Book Date'] = pd.to_datetime(df_combined_plans['Book Date'], errors='coerce')
+
+# Step 4: Replace specific values in the "Line" column
+df_combined_plans['Line'] = df_combined_plans['Line'].replace({
+    "Simple BOP Liability": "BOP Liability",
+    "Simple BOP Property": "BOP Property"
+})
+
+# Final DataFrame
+print(df_combined_plans.head())  # Or save the modified dataframe to a new CSV or file
