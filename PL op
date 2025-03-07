@@ -1,14 +1,5 @@
-import pandas as pd
-
-# Step 1: Load the Excel file and select the "DIM Cohort Color" sheet
-file_path = r"\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"
-df = pd.read_excel(file_path, sheet_name="DIM Cohort Color", engine="openpyxl")
-
-# Step 2: Promote headers (this is automatically done by pandas when reading the Excel file)
-
-# Step 3: Change column types
-df["Cohort Color"] = df["Cohort Color"].astype(str)  # Convert 'Cohort Color' to string (text)
-df["Cohort Order"] = pd.to_numeric(df["Cohort Order"], downcast="integer", errors="coerce")  # Convert 'Cohort Order' to integer
-
-# Final DataFrame
-print(df.head())  # Or save the modified dataframe to a new file
+let
+    Source = Value.NativeQuery(Snowflake.Databases("libertymutual_grm_us_edw.us-east-1.snowflakecomputing.com","SAS_PROD_SELFSERVE_REPORTING_WH",[Role="SAS_SS_USER_PRICE_RYAN_MASTER_ROLE"]){[Name="SAS_PROD_SELF_SERVE"]}[Data], "Select #(lf)*#(lf)FROM SAS_PROD_SELF_SERVE.FINANCE_SELFSERVE.USRM_TOPLINE_RATE_AUDIT", null, [EnableFolding=true]),
+  #"Appended query" = Table.Combine({Source, LM_AUTO_RATE_AUDIT_PBI})
+in
+    #"Appended query"
