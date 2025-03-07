@@ -1,8 +1,29 @@
-let
-  Source = Excel.Workbook(File.Contents("\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"), null, true),
-  Navigation = Source{[Item = "Specialty", Kind = "Sheet"]}[Data],
-  #"Promoted headers" = Table.PromoteHeaders(Navigation, [PromoteAllScalars = true]),
-  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"Concat", type text}, {"LOB", type text}, {"State Abbr", type text}, {"Brand", type text}, {"2024 Color Cohort", type text}, {"2025 Color Cohort", type text}, {"Cohort Order", Int64.Type}, {"Cohort Version", type date}, {"LOB Rollup", type text}, {"Cohort Index", type text}}),
-  #"Replaced value" = Table.ReplaceValue(#"Changed column type", "NA", "None", Replacer.ReplaceValue, {"2024 Color Cohort", "2025 Color Cohort"})
-in
-  #"Replaced value"
+import pandas as pd
+
+# Load the Excel file
+file_path = r'\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx'
+
+# Read the "Specialty" sheet
+df = pd.read_excel(file_path, sheet_name="Specialty")
+
+# Promote headers (first row becomes column names)
+df.columns = df.iloc[0]
+df = df.drop(0)
+
+# Change column types
+df['Concat'] = df['Concat'].astype(str)
+df['LOB'] = df['LOB'].astype(str)
+df['State Abbr'] = df['State Abbr'].astype(str)
+df['Brand'] = df['Brand'].astype(str)
+df['2024 Color Cohort'] = df['2024 Color Cohort'].astype(str)
+df['2025 Color Cohort'] = df['2025 Color Cohort'].astype(str)
+df['Cohort Order'] = pd.to_numeric(df['Cohort Order'], errors='coerce')  # Convert to integer
+df['Cohort Version'] = pd.to_datetime(df['Cohort Version'], errors='coerce')  # Convert to date
+df['LOB Rollup'] = df['LOB Rollup'].astype(str)
+df['Cohort Index'] = df['Cohort Index'].astype(str)
+
+# Replace "NA" with "None" in "2024 Color Cohort" and "2025 Color Cohort" columns
+df[['2024 Color Cohort', '2025 Color Cohort']] = df[['2024 Color Cohort', '2025 Color Cohort']].replace("NA", "None")
+
+# Show the resulting dataframe
+print(df)
