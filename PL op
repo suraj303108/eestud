@@ -1,30 +1,10 @@
-import snowflake.connector
-import pandas as pd
-
-# Step 1: Establish a connection to Snowflake
-conn = snowflake.connector.connect(
-    user='<your_username>',
-    password='<your_password>',
-    account='libertymutual_grm_us_edw.us-east-1.snowflakecomputing.com',
-    warehouse='SAS_PROD_SELFSERVE_REPORTING_WH',
-    database='SAS_PROD_SELF_SERVE',
-    schema='FINANCE_SELFSERVE',
-    role='SAS_SS_USER_PRICE_RYAN_MASTER_ROLE'
-)
-
-# Step 2: Execute the query to fetch data from Snowflake
-query = "SELECT * FROM SAS_PROD_SELF_SERVE.FINANCE_SELFSERVE.USRM_TOPLINE_RATE_AUDIT"
-df_snowflake = pd.read_sql(query, conn)
-
-# Step 3: If you have a DataFrame `LM_AUTO_RATE_AUDIT_PBI` from another source, you can combine them
-# For example, let's assume `LM_AUTO_RATE_AUDIT_PBI` is loaded into a pandas DataFrame.
-LM_AUTO_RATE_AUDIT_PBI = pd.DataFrame()  # Replace this with actual DataFrame loading code
-
-# Step 4: Combine the two DataFrames
-df_combined = pd.concat([df_snowflake, LM_AUTO_RATE_AUDIT_PBI], ignore_index=True)
-
-# Step 5: Optionally, you can save the result or perform further analysis
-print(df_combined.head())  # Display the first few rows of the combined DataFrame
-
-# Close the connection
-conn.close()
+let
+  Source = Excel.Workbook(File.Contents("\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"), null, true),
+  Navigation = Source{[Item = "LOB", Kind = "Sheet"]}[Data],
+  #"Promoted headers" = Table.PromoteHeaders(Navigation, [PromoteAllScalars = true]),
+  #"Filtered rows" = Table.SelectRows(#"Promoted headers", each [REF LOB] <> null and [REF LOB] <> ""),
+  #"Removed columns" = Table.RemoveColumns(#"Filtered rows", {"Column3"}),
+  #"Transform columns" = Table.TransformColumnTypes(#"Removed columns", {{"REF LOB", type text}, {"LOB", type text}}),
+  #"Replace errors" = Table.ReplaceErrorValues(#"Transform columns", {{"REF LOB", null}, {"LOB", null}})
+in
+  #"Replace errors"
