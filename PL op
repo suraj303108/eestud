@@ -1,7 +1,14 @@
-let
-  Source = Excel.Workbook(File.Contents("\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"), null, true),
-  Navigation = Source{[Item = "DIM Cohort Color", Kind = "Sheet"]}[Data],
-  #"Promoted headers" = Table.PromoteHeaders(Navigation, [PromoteAllScalars = true]),
-  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"Cohort Color", type text}, {"Cohort Order", Int64.Type}})
-in
-  #"Changed column type"
+import pandas as pd
+
+# Step 1: Load the Excel file and select the "DIM Cohort Color" sheet
+file_path = r"\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"
+df = pd.read_excel(file_path, sheet_name="DIM Cohort Color", engine="openpyxl")
+
+# Step 2: Promote headers (this is automatically done by pandas when reading the Excel file)
+
+# Step 3: Change column types
+df["Cohort Color"] = df["Cohort Color"].astype(str)  # Convert 'Cohort Color' to string (text)
+df["Cohort Order"] = pd.to_numeric(df["Cohort Order"], downcast="integer", errors="coerce")  # Convert 'Cohort Order' to integer
+
+# Final DataFrame
+print(df.head())  # Or save the modified dataframe to a new file
