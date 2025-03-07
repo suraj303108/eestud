@@ -1,13 +1,43 @@
-let
-  Source = Excel.Workbook(File.Contents("\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"), null, true),
-  Navigation = Source{[Item = "Auto", Kind = "Sheet"]}[Data],
-  #"Promoted headers" = Table.PromoteHeaders(Navigation, [PromoteAllScalars = true]),
-  #"Added LOB Rollup" = Table.AddColumn(#"Promoted headers", "LOB Rollup", each "Auto"),
-  #"Added Cohort Index" = Table.AddColumn(#"Added LOB Rollup", "Cohort Index", each [Brand] & [LOB Rollup] & [State]),
-  #"Replaced value 1" = Table.ReplaceValue(#"Added Cohort Index", "(exiting)", "6 - Exiting", Replacer.ReplaceText, {"NB Color"}),
-  #"Replaced value 2" = Table.ReplaceValue(#"Replaced value 1", null, "6 - Exiting", Replacer.ReplaceValue, {"NB Color"}),
-  #"Split column by delimiter" = Table.SplitColumn(#"Replaced value 2", "NB Color", Splitter.SplitTextByDelimiter("-"), {"NB Color.1", "NB Color.2"}),
-  #"Renamed columns" = Table.RenameColumns(#"Split column by delimiter", {{"NB Color.2", "Cohort Color"}, {"NB Color.1", "Cohort Order"}, {"State", "State Abbr"}}),
-  #"Changed column type" = Table.TransformColumnTypes(#"Renamed columns", {{"Concat", type text}, {"Cohort Order", Int64.Type}, {"Cohort Color", type text}, {"State Abbr", type text}, {"Brand", type text}, {"NB Profit Year", type text}, {"RB Profit Year", type text}, {"Cohort Version", type date}, {"LOB Rollup", type text}, {"Cohort Index", type text}})
-in
-  #"Changed column type"
+import pandas as pd
+
+# Load the Excel file
+file_path = r'\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx'
+
+# Read the "Auto" sheet
+df = pd.read_excel(file_path, sheet_name="Auto")
+
+# Promote headers (first row becomes column names)
+df.columns = df.iloc[0]
+df = df.drop(0)
+
+# Add "LOB Rollup" column with value "Auto"
+df['LOB Rollup'] = 'Auto'
+
+# Add "Cohort Index" column by concatenating 'Brand', 'LOB Rollup', and 'State'
+df['Cohort Index'] = df['Brand'].astype(str) + df['LOB Rollup'] + df['State'].astype(str)
+
+# Replace "(exiting)" with "6 - Exiting" in 'NB Color' column
+df['NB Color'] = df['NB Color'].replace("(exiting)", "6 - Exiting")
+
+# Replace null values in 'NB Color' column with "6 - Exiting"
+df['NB Color'] = df['NB Color'].fillna("6 - Exiting")
+
+# Split 'NB Color' column into two parts by delimiter '-'
+df[['NB Color.1', 'NB Color.2']] = df['NB Color'].str.split('-', expand=True)
+
+# Rename columns
+df = df.rename(columns={'NB Color.1': 'Cohort Order', 'NB Color.2': 'Cohort Color', 'State': 'State Abbr'})
+
+# Change column types
+df['Cohort Order'] = pd.to_numeric(df['Cohort Order'], errors='coerce')  # Convert to numeric (integer)
+df['Cohort Color'] = df['Cohort Color'].astype(str)  # Convert to string
+df['State Abbr'] = df['State Abbr'].astype(str)  # Convert to string
+df['Brand'] = df['Brand'].astype(str)  # Convert to string
+df['NB Profit Year'] = df['NB Profit Year'].astype(str)  # Convert to string
+df['RB Profit Year'] = df['RB Profit Year'].astype(str)  # Convert to string
+df['Cohort Version'] = pd.to_datetime(df['Cohort Version'], errors='coerce')  # Convert to date
+df['LOB Rollup'] = df['LOB Rollup'].astype(str)  # Convert to string
+df['Cohort Index'] = df['Cohort Index'].astype(str)  # Convert to string
+
+# Show the resulting dataframe
+print(df)
