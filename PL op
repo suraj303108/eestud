@@ -1,15 +1,7 @@
-import pandas as pd
-
-# Step 1: Load the Excel file and select the "DIM Brand" sheet
-file_path = r"\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"
-df = pd.read_excel(file_path, sheet_name="DIM Brand", engine="openpyxl")
-
-# Step 2: Promote headers (this is done automatically by pandas when reading the Excel file)
-
-# Step 3: Change column types
-df["Brand"] = df["Brand"].astype(str)
-df["Brand Abbr"] = df["Brand Abbr"].astype(str)
-df["Brand Full Name"] = df["Brand Full Name"].astype(str)
-
-# Final DataFrame
-print(df.head())  # Or save the modified dataframe to a new file
+let
+  Source = Excel.Workbook(File.Contents("\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"), null, true),
+  Navigation = Source{[Item = "DIM Cohort Color", Kind = "Sheet"]}[Data],
+  #"Promoted headers" = Table.PromoteHeaders(Navigation, [PromoteAllScalars = true]),
+  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"Cohort Color", type text}, {"Cohort Order", Int64.Type}})
+in
+  #"Changed column type"
