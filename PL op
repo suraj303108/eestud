@@ -1,29 +1,7 @@
-import pandas as pd
-
-# Load the Excel file
-file_path = r'\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx'
-xls = pd.ExcelFile(file_path)
-
-# Read the 'LOB' sheet
-df = pd.read_excel(xls, sheet_name="LOB")
-
-# Promote headers (first row becomes column names)
-df.columns = df.iloc[0]
-df = df.drop(0)
-
-# Filter rows where 'REF LOB' is not null or empty
-df = df[df['REF LOB'].notnull() & (df['REF LOB'] != '')]
-
-# Remove 'Column3'
-df = df.drop(columns=['Column3'])
-
-# Transform columns to text (ensure the 'REF LOB' and 'LOB' columns are string type)
-df['REF LOB'] = df['REF LOB'].astype(str)
-df['LOB'] = df['LOB'].astype(str)
-
-# Replace errors (if any) with null values
-df['REF LOB'] = df['REF LOB'].apply(lambda x: None if pd.isna(x) else x)
-df['LOB'] = df['LOB'].apply(lambda x: None if pd.isna(x) else x)
-
-# Show the resulting dataframe
-print(df)
+let
+  Source = Excel.Workbook(File.Contents("\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"), null, true),
+  Navigation = Source{[Item = "REF LOB Colors", Kind = "Sheet"]}[Data],
+  #"Promoted headers" = Table.PromoteHeaders(Navigation, [PromoteAllScalars = true]),
+  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"LINE ID", type text}, {"Cohort Group", type text}})
+in
+  #"Changed column type"
