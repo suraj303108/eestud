@@ -1,7 +1,18 @@
-let
-  Source = Excel.Workbook(File.Contents("\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"), null, true),
-  Navigation = Source{[Item = "REF LOB Colors", Kind = "Sheet"]}[Data],
-  #"Promoted headers" = Table.PromoteHeaders(Navigation, [PromoteAllScalars = true]),
-  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"LINE ID", type text}, {"Cohort Group", type text}})
-in
-  #"Changed column type"
+import pandas as pd
+
+# Load the Excel file
+file_path = r'\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx'
+
+# Read the 'REF LOB Colors' sheet
+df = pd.read_excel(file_path, sheet_name="REF LOB Colors")
+
+# Promote headers (first row becomes column names)
+df.columns = df.iloc[0]
+df = df.drop(0)
+
+# Change column types
+df['LINE ID'] = df['LINE ID'].astype(str)
+df['Cohort Group'] = df['Cohort Group'].astype(str)
+
+# Show the resulting dataframe
+print(df)
