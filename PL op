@@ -1,46 +1,8 @@
-import pandas as pd
-
-# Load the Excel file
-file_path = r'\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx'
-
-# Read the 'Home' sheet
-df = pd.read_excel(file_path, sheet_name="Home")
-
-# Promote headers (first row becomes column names)
-df.columns = df.iloc[0]
-df = df.drop(0)
-
-# Select the relevant columns
-df = df[["Concat", "State", "Brand", "NB Color", "NB Profit Year", "RB Profit Year", "Cohort Version"]]
-
-# Add "LOB Rollup" column with value "Property"
-df['LOB Rollup'] = 'Property'
-
-# Add "Cohort Index" column by concatenating 'Brand', 'LOB Rollup', and 'State'
-df['Cohort Index'] = df['Brand'].astype(str) + df['LOB Rollup'] + df['State'].astype(str)
-
-# Replace "(exiting)" with "6 - Exiting" in 'NB Color' column
-df['NB Color'] = df['NB Color'].replace("(exiting)", "6 - Exiting")
-
-# Replace null values in 'NB Color' column with "6 - Exiting"
-df['NB Color'] = df['NB Color'].fillna("6 - Exiting")
-
-# Split 'NB Color' column into two parts by delimiter '-'
-df[['NB Color.1', 'NB Color.2']] = df['NB Color'].str.split('-', expand=True)
-
-# Rename columns
-df = df.rename(columns={'NB Color.1': 'Cohort Order', 'NB Color.2': 'Cohort Color', 'State': 'State Abbr'})
-
-# Change column types
-df['Cohort Order'] = pd.to_numeric(df['Cohort Order'], errors='coerce')  # Convert to numeric (integer)
-df['Cohort Color'] = df['Cohort Color'].astype(str)  # Convert to string
-df['State Abbr'] = df['State Abbr'].astype(str)  # Convert to string
-df['Brand'] = df['Brand'].astype(str)  # Convert to string
-df['NB Profit Year'] = df['NB Profit Year'].astype(str)  # Convert to string
-df['RB Profit Year'] = df['RB Profit Year'].astype(str)  # Convert to string
-df['Cohort Version'] = pd.to_datetime(df['Cohort Version'], errors='coerce')  # Convert to date
-df['LOB Rollup'] = df['LOB Rollup'].astype(str)  # Convert to string
-df['Cohort Index'] = df['Cohort Index'].astype(str)  # Convert to string
-
-# Show the resulting dataframe
-print(df)
+let
+  Source = Excel.Workbook(File.Contents("\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"), null, true),
+  Navigation = Source{[Item = "Specialty", Kind = "Sheet"]}[Data],
+  #"Promoted headers" = Table.PromoteHeaders(Navigation, [PromoteAllScalars = true]),
+  #"Changed column type" = Table.TransformColumnTypes(#"Promoted headers", {{"Concat", type text}, {"LOB", type text}, {"State Abbr", type text}, {"Brand", type text}, {"2024 Color Cohort", type text}, {"2025 Color Cohort", type text}, {"Cohort Order", Int64.Type}, {"Cohort Version", type date}, {"LOB Rollup", type text}, {"Cohort Index", type text}}),
+  #"Replaced value" = Table.ReplaceValue(#"Changed column type", "NA", "None", Replacer.ReplaceValue, {"2024 Color Cohort", "2025 Color Cohort"})
+in
+  #"Replaced value"
