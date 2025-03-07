@@ -1,6 +1,17 @@
-let
-  Source = Table.Combine({#"State Cohorts (Auto)", #"State Cohorts (Home)"}),
-  #"Transform columns" = Table.TransformColumnTypes(Source, {{"Cohort Order", type text}}),
-  #"Replace errors" = Table.ReplaceErrorValues(#"Transform columns", {{"Cohort Order", null}})
-in
-  #"Replace errors"
+import pandas as pd
+
+# Load the two datasets (replace with actual file paths)
+state_cohorts_auto = pd.read_excel(r'path_to_state_cohorts_auto.xlsx')
+state_cohorts_home = pd.read_excel(r'path_to_state_cohorts_home.xlsx')
+
+# Combine the two tables (similar to Table.Combine in M)
+df = pd.concat([state_cohorts_auto, state_cohorts_home], ignore_index=True)
+
+# Transform 'Cohort Order' column to text (string type)
+df['Cohort Order'] = df['Cohort Order'].astype(str)
+
+# Replace errors (NaN values) in the 'Cohort Order' column with None (null in Python)
+df['Cohort Order'] = df['Cohort Order'].apply(lambda x: None if pd.isna(x) else x)
+
+# Show the resulting dataframe
+print(df)
