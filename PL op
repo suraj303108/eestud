@@ -1,17 +1,13 @@
-import pandas as pd
-
-# Load the two datasets (replace with actual file paths)
-state_cohorts_auto = pd.read_excel(r'path_to_state_cohorts_auto.xlsx')
-state_cohorts_home = pd.read_excel(r'path_to_state_cohorts_home.xlsx')
-
-# Combine the two tables (similar to Table.Combine in M)
-df = pd.concat([state_cohorts_auto, state_cohorts_home], ignore_index=True)
-
-# Transform 'Cohort Order' column to text (string type)
-df['Cohort Order'] = df['Cohort Order'].astype(str)
-
-# Replace errors (NaN values) in the 'Cohort Order' column with None (null in Python)
-df['Cohort Order'] = df['Cohort Order'].apply(lambda x: None if pd.isna(x) else x)
-
-# Show the resulting dataframe
-print(df)
+let
+  Source = Excel.Workbook(File.Contents("\\PDC-AIP-DATA\ETS_ESSBASE_GCM_NAS_T3_PROD01\Power BI Reporting\Topline\State Cohorts.xlsx"), null, true),
+  Navigation = Source{[Item = "Auto", Kind = "Sheet"]}[Data],
+  #"Promoted headers" = Table.PromoteHeaders(Navigation, [PromoteAllScalars = true]),
+  #"Added LOB Rollup" = Table.AddColumn(#"Promoted headers", "LOB Rollup", each "Auto"),
+  #"Added Cohort Index" = Table.AddColumn(#"Added LOB Rollup", "Cohort Index", each [Brand] & [LOB Rollup] & [State]),
+  #"Replaced value 1" = Table.ReplaceValue(#"Added Cohort Index", "(exiting)", "6 - Exiting", Replacer.ReplaceText, {"NB Color"}),
+  #"Replaced value 2" = Table.ReplaceValue(#"Replaced value 1", null, "6 - Exiting", Replacer.ReplaceValue, {"NB Color"}),
+  #"Split column by delimiter" = Table.SplitColumn(#"Replaced value 2", "NB Color", Splitter.SplitTextByDelimiter("-"), {"NB Color.1", "NB Color.2"}),
+  #"Renamed columns" = Table.RenameColumns(#"Split column by delimiter", {{"NB Color.2", "Cohort Color"}, {"NB Color.1", "Cohort Order"}, {"State", "State Abbr"}}),
+  #"Changed column type" = Table.TransformColumnTypes(#"Renamed columns", {{"Concat", type text}, {"Cohort Order", Int64.Type}, {"Cohort Color", type text}, {"State Abbr", type text}, {"Brand", type text}, {"NB Profit Year", type text}, {"RB Profit Year", type text}, {"Cohort Version", type date}, {"LOB Rollup", type text}, {"Cohort Index", type text}})
+in
+  #"Changed column type"
